@@ -1,9 +1,6 @@
 // src/api/auth.ts
-import bcrypt from 'bcryptjs';
 import { ENV } from '../config/env';
-import { getDemoUserByCredentials, hasDemoUsers } from '../config/demoData';
 import type { Role } from '../models/roles';
-import { supabase } from './supabaseClient';
 
 export type AuthUser = {
   id: number;
@@ -18,7 +15,7 @@ type LoginResponse = {
   error?: string;
 };
 
-const LOGIN_PATH = '/auth/login'; // implemented on backend (Next.js / Edge Function)
+const LOGIN_PATH = '/auth-login'; // implemented on backend (Edge Function)
 
 async function apiFetch<T>(path: string, options: RequestInit): Promise<T> {
   const url = `${ENV.AUTH_BASE_URL}${path}`;
@@ -26,6 +23,8 @@ async function apiFetch<T>(path: string, options: RequestInit): Promise<T> {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      apikey: ENV.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${ENV.SUPABASE_ANON_KEY}`,
       ...(options.headers || {}),
     },
   });
@@ -45,45 +44,28 @@ export async function loginWithCredentials(
     throw new Error('Username and password are required');
   }
 
-  let lastError: unknown;
-
-  if (ENV.AUTH_BASE_URL) {
-    try {
-      const body = JSON.stringify({ username: trimmedUsername, password });
-      const data = await apiFetch<LoginResponse>(LOGIN_PATH, {
-        method: 'POST',
-        body,
-      });
-
-      if (!data.ok || !data.user) {
-        throw new Error(data.error || 'Invalid credentials');
-      }
-
-      return data.user;
-    } catch (err) {
-      lastError = err;
-      console.warn('[auth] Falling back to Supabase login:', err);
-    }
+  if (!ENV.AUTH_BASE_URL) {
+    throw new Error('Auth endpoint is not configured');
   }
 
   try {
-    return await fallbackLoginWithSupabase(trimmedUsername, password);
-  } catch (err) {
-    lastError = err;
-  }
+    const body = JSON.stringify({ username: trimmedUsername, password });
+    const data = await apiFetch<LoginResponse>(LOGIN_PATH, {
+      method: 'POST',
+      body,
+    });
 
-  if (hasDemoUsers()) {
-    const demo = getDemoUserByCredentials(trimmedUsername, password);
-    if (demo) {
-      console.info('[auth] Using demo credentials for', trimmedUsername);
-      const { id, username: uname, role } = demo;
-      return { id, username: uname, role };
+    if (!data.ok || !data.user) {
+      throw new Error(data.error || 'Invalid credentials');
     }
-  }
 
-  const message =
-    lastError instanceof Error ? lastError.message : 'Invalid credentials';
-  throw new Error(message);
+    return data.user;
+  } catch (err) {
+    if (err instanceof Error) {
+      throw new Error(err.message || 'Unable to login');
+    }
+    throw new Error('Unable to login');
+  }
 }
 
 // For change password endpoints, mirror your Next.js:
@@ -117,35 +99,4 @@ export async function logoutRemote(): Promise<void> {
   } catch {
     // ignore
   }
-}
-
-type SupabaseLoginRow = AuthUser & { passwordHash?: string | null };
-
-async function fallbackLoginWithSupabase(username: string, password: string): Promise<AuthUser> {
-  const { data, error } = await supabase
-    .from('User')
-    .select('id, username, role, passwordHash')
-    .eq('username', username)
-    .maybeSingle<SupabaseLoginRow>();
-
-  if (error) {
-    throw new Error(error.message || 'Unable to login');
-  }
-
-  if (!data) {
-    throw new Error('Invalid credentials');
-  }
-
-  const { passwordHash } = data;
-  if (!passwordHash) {
-    throw new Error('Password is not configured for this user');
-  }
-
-  const isValid = bcrypt.compareSync(password, passwordHash);
-  if (!isValid) {
-    throw new Error('Invalid credentials');
-  }
-
-  const { id, username: uname, role } = data;
-  return { id, username: uname, role };
 }
