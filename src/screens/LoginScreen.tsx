@@ -21,7 +21,11 @@ export function LoginScreen() {
       await setSession({ user, haConnection });
       // Navigation container will switch from Auth to App automatically
     } catch (err) {
-      Alert.alert('Login failed', err instanceof Error ? err.message : 'Unknown error');
+      console.log('login error in screen', err);
+      Alert.alert(
+        'Login failed',
+        err instanceof Error ? `${err.name}: ${err.message}` : JSON.stringify(err)
+      );
     } finally {
       setLoading(false);
     }
