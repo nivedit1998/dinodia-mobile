@@ -2,46 +2,55 @@
 import { supabase } from './supabaseClient';
 import type { User } from '../models/user';
 import type { Role } from '../models/roles';
-import type { HaConnection, HaConnection as HaConnectionModel } from '../models/haConnection';
+import type { HaConnection } from '../models/haConnection';
 import type { AccessRule } from '../models/accessRule';
 import type { UIDevice, DeviceOverride } from '../models/device';
 import { getDevicesWithMetadata, EnrichedDevice, HaConnectionLike } from './ha';
 import { classifyDeviceByLabel } from '../utils/labelCatalog';
 
-type MaybeArray<T> = T | T[] | null | undefined;
-
 type UserWithRelations = User & {
-  haConnection?: MaybeArray<HaConnectionModel>;
-  ownedHaConnection?: MaybeArray<HaConnectionModel>;
   accessRules?: AccessRule[];
-};
-
-const firstOrNull = <T>(value: MaybeArray<T>): T | null => {
-  if (Array.isArray(value)) {
-    return value.length > 0 ? value[0]! : null;
-  }
-  return value ?? null;
 };
 
 async function fetchUserWithRelations(userId: number): Promise<UserWithRelations | null> {
   const { data, error } = await supabase
     .from('User')
-    .select(
-      `
-      id,
-      username,
-      role,
-      haConnectionId,
-      haConnection:HaConnection!AssignedHaConnection(*),
-      ownedHaConnection:HaConnection!OwnedHaConnection(*),
-      accessRules:AccessRule(*)
-    `
-    )
+    .select('id, username, role, haConnectionId')
     .eq('id', userId)
     .single();
 
   if (error) throw error;
-  return (data ?? null) as UserWithRelations | null;
+  if (!data) return null;
+
+  const user: UserWithRelations = data as UserWithRelations;
+
+  const { data: rules, error: rulesError } = await supabase
+    .from('AccessRule')
+    .select('*')
+    .eq('userId', userId);
+  if (!rulesError && rules) {
+    user.accessRules = rules as AccessRule[];
+  }
+
+  return user;
+}
+
+async function fetchHaConnectionById(id: number): Promise<HaConnection | null> {
+  const { data, error } = await supabase.from('HaConnection').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return data as HaConnection;
+}
+
+async function fetchHaConnectionOwnedBy(userId: number): Promise<HaConnection | null> {
+  const { data, error } = await supabase
+    .from('HaConnection')
+    .select('*')
+    .eq('ownerId', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as HaConnection;
 }
 
 // This mimics src/lib/haConnection.getUserWithHaConnection
@@ -51,31 +60,21 @@ export async function getUserWithHaConnection(
   let user = await fetchUserWithRelations(userId);
   if (!user) throw new Error('User not found');
 
-  let haConnection =
-    (firstOrNull(user.haConnection) ||
-      firstOrNull(user.ownedHaConnection)) as HaConnection | null;
+  let haConnection: HaConnection | null = null;
 
-  if (!haConnection && user.haConnectionId) {
-    const { data, error } = await supabase
-      .from('HaConnection')
-      .select('*')
-      .eq('id', user.haConnectionId)
-      .single();
-    if (error) throw error;
-    haConnection = data as HaConnection;
+  if (user.haConnectionId) {
+    haConnection = await fetchHaConnectionById(user.haConnectionId);
+  }
+
+  if (!haConnection && user.role === 'ADMIN') {
+    haConnection = await fetchHaConnectionOwnedBy(user.id);
   }
 
   if (!haConnection && user.role === 'TENANT') {
     // Find any admin with a connection
     const { data: admins, error } = await supabase
       .from('User')
-      .select(
-        `
-        id,
-        haConnectionId,
-        ownedHaConnection:HaConnection!OwnedHaConnection (id)
-      `
-      )
+      .select('id, haConnectionId')
       .eq('role', 'ADMIN')
       .limit(1);
     if (error) throw error;
@@ -83,10 +82,9 @@ export async function getUserWithHaConnection(
     type AdminRow = {
       id: number;
       haConnectionId: number | null;
-      ownedHaConnection: MaybeArray<{ id: number }>;
     };
     const admin = admins?.[0] as AdminRow | undefined;
-    const adminOwned = firstOrNull(admin?.ownedHaConnection);
+    const adminOwned = admin ? await fetchHaConnectionOwnedBy(admin.id) : null;
     const adminHaConnectionId = admin?.haConnectionId ?? adminOwned?.id ?? null;
 
     if (admin && !admin.haConnectionId && adminHaConnectionId) {
@@ -102,14 +100,10 @@ export async function getUserWithHaConnection(
         .update({ haConnectionId: adminHaConnectionId })
         .eq('id', user.id);
 
-      const { data: ha, error: errHa } = await supabase
-        .from('HaConnection')
-        .select('*')
-        .eq('id', adminHaConnectionId)
-        .single();
-      if (errHa) throw errHa;
+      const ha = await fetchHaConnectionById(adminHaConnectionId);
+      if (!ha) throw new Error('HA connection not found');
 
-      haConnection = ha as HaConnection;
+      haConnection = ha;
       user = (await fetchUserWithRelations(userId))!;
     }
   }
