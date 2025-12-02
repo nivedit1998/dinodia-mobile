@@ -2,8 +2,8 @@
   "expo": {
     "name": "dinodia-mobile",
     "slug": "dinodia-mobile",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "0.1.0",
+    "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -22,7 +22,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.dinodiamobile"
+      "package": "com.dinodia.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"

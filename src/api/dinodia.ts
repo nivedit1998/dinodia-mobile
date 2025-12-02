@@ -8,10 +8,19 @@ import type { UIDevice, DeviceOverride } from '../models/device';
 import { getDevicesWithMetadata, EnrichedDevice, HaConnectionLike } from './ha';
 import { classifyDeviceByLabel } from '../utils/labelCatalog';
 
+type MaybeArray<T> = T | T[] | null | undefined;
+
 type UserWithRelations = User & {
-  haConnection?: HaConnectionModel | null;
-  ownedHaConnection?: HaConnectionModel | null;
+  haConnection?: MaybeArray<HaConnectionModel>;
+  ownedHaConnection?: MaybeArray<HaConnectionModel>;
   accessRules?: AccessRule[];
+};
+
+const firstOrNull = <T>(value: MaybeArray<T>): T | null => {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value[0]! : null;
+  }
+  return value ?? null;
 };
 
 async function fetchUserWithRelations(userId: number): Promise<UserWithRelations | null> {
@@ -42,8 +51,9 @@ export async function getUserWithHaConnection(
   let user = await fetchUserWithRelations(userId);
   if (!user) throw new Error('User not found');
 
-  let haConnection = (user.haConnection ||
-    user.ownedHaConnection) as HaConnection | undefined | null;
+  let haConnection =
+    (firstOrNull(user.haConnection) ||
+      firstOrNull(user.ownedHaConnection)) as HaConnection | null;
 
   if (!haConnection && user.haConnectionId) {
     const { data, error } = await supabase
@@ -70,10 +80,14 @@ export async function getUserWithHaConnection(
       .limit(1);
     if (error) throw error;
 
-    const admin = admins?.[0] as
-      | { id: number; haConnectionId: number | null; ownedHaConnection: { id: number } | null }
-      | undefined;
-    const adminHaConnectionId = admin?.haConnectionId ?? admin?.ownedHaConnection?.id ?? null;
+    type AdminRow = {
+      id: number;
+      haConnectionId: number | null;
+      ownedHaConnection: MaybeArray<{ id: number }>;
+    };
+    const admin = admins?.[0] as AdminRow | undefined;
+    const adminOwned = firstOrNull(admin?.ownedHaConnection);
+    const adminHaConnectionId = admin?.haConnectionId ?? adminOwned?.id ?? null;
 
     if (admin && !admin.haConnectionId && adminHaConnectionId) {
       await supabase
