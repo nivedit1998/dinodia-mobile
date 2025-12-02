@@ -1,6 +1,7 @@
 // src/api/auth.ts
 import bcrypt from 'bcryptjs';
 import { ENV } from '../config/env';
+import { getDemoUserByCredentials, hasDemoUsers } from '../config/demoData';
 import type { Role } from '../models/roles';
 import { supabase } from './supabaseClient';
 
@@ -44,6 +45,8 @@ export async function loginWithCredentials(
     throw new Error('Username and password are required');
   }
 
+  let lastError: unknown;
+
   if (ENV.AUTH_BASE_URL) {
     try {
       const body = JSON.stringify({ username: trimmedUsername, password });
@@ -58,11 +61,29 @@ export async function loginWithCredentials(
 
       return data.user;
     } catch (err) {
+      lastError = err;
       console.warn('[auth] Falling back to Supabase login:', err);
     }
   }
 
-  return await fallbackLoginWithSupabase(trimmedUsername, password);
+  try {
+    return await fallbackLoginWithSupabase(trimmedUsername, password);
+  } catch (err) {
+    lastError = err;
+  }
+
+  if (hasDemoUsers()) {
+    const demo = getDemoUserByCredentials(trimmedUsername, password);
+    if (demo) {
+      console.info('[auth] Using demo credentials for', trimmedUsername);
+      const { id, username: uname, role } = demo;
+      return { id, username: uname, role };
+    }
+  }
+
+  const message =
+    lastError instanceof Error ? lastError.message : 'Invalid credentials';
+  throw new Error(message);
 }
 
 // For change password endpoints, mirror your Next.js:

@@ -7,6 +7,7 @@ import type { AccessRule } from '../models/accessRule';
 import type { UIDevice, DeviceOverride } from '../models/device';
 import { getDevicesWithMetadata, EnrichedDevice, HaConnectionLike } from './ha';
 import { classifyDeviceByLabel } from '../utils/labelCatalog';
+import { getDemoDevicesForUser, getDemoUserById } from '../config/demoData';
 
 type MaybeArray<T> = T | T[] | null | undefined;
 
@@ -48,6 +49,20 @@ async function fetchUserWithRelations(userId: number): Promise<UserWithRelations
 export async function getUserWithHaConnection(
   userId: number
 ): Promise<{ user: UserWithRelations; haConnection: HaConnection }> {
+  const demoUser = getDemoUserById(userId);
+  if (demoUser) {
+    const user: UserWithRelations = {
+      id: demoUser.id,
+      username: demoUser.username,
+      role: demoUser.role,
+      haConnectionId: demoUser.haConnection.id,
+      haConnection: [demoUser.haConnection],
+      ownedHaConnection: [demoUser.haConnection],
+      accessRules: demoUser.accessRules ?? [],
+    };
+    return { user, haConnection: demoUser.haConnection };
+  }
+
   let user = await fetchUserWithRelations(userId);
   if (!user) throw new Error('User not found');
 
@@ -122,6 +137,11 @@ export async function getUserWithHaConnection(
 }
 
 export async function fetchDevicesForUser(userId: number): Promise<UIDevice[]> {
+  const demoUser = getDemoUserById(userId);
+  if (demoUser) {
+    return getDemoDevicesForUser(userId);
+  }
+
   const { user, haConnection } = await getUserWithHaConnection(userId);
   const haLike: HaConnectionLike = {
     baseUrl: haConnection.baseUrl,
