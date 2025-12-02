@@ -128,7 +128,8 @@ export async function fetchDevicesForUser(userId: number): Promise<UIDevice[]> {
     enriched = await getDevicesWithMetadata(haLike);
   } catch (err) {
     console.error('Failed to fetch devices from HA:', err);
-    throw new Error('Failed to fetch HA devices');
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    throw new Error(`Failed to fetch HA devices: ${message}`);
   }
 
   // 2) Load overrides

@@ -32,23 +32,60 @@ export type EnrichedDevice = {
   attributes: Record<string, unknown>;
 };
 
+function buildHaUrl(baseUrl: string, path: string): string {
+  if (path.startsWith('/')) {
+    return `${baseUrl}${path}`;
+  }
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
+  return `${normalizedBase}/${path}`;
+}
+
+function describeNetworkFailure(baseUrl: string, path: string, err: unknown): Error {
+  const url = buildHaUrl(baseUrl, path);
+  const original = err instanceof Error ? err.message : String(err);
+  const hints: string[] = [];
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host.endsWith('.local')) {
+      hints.push(
+        'Android devices often cannot resolve .local hostnames. Update the HA URL to use the IP address (e.g., http://192.168.1.10:8123) in the Admin settings.'
+      );
+    }
+    if (parsed.protocol === 'http:') {
+      hints.push(
+        'Ensure your device is on the same LAN as Home Assistant and that cleartext HTTP traffic is allowed.'
+      );
+    }
+  } catch {
+    // ignore parsing issues; baseUrl should already be valid
+  }
+  const hintText = hints.length > 0 ? ` ${hints.join(' ')}` : '';
+  return new Error(`HA network error while calling ${url}: ${original}.${hintText}`);
+}
+
 async function callHomeAssistantAPI<T>(
   ha: HaConnectionLike,
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const url = `${ha.baseUrl}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${ha.longLivedToken}`,
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
+  const url = buildHaUrl(ha.baseUrl, path);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${ha.longLivedToken}`,
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (err) {
+    throw describeNetworkFailure(ha.baseUrl, path, err);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA API error ${res.status} on ${path}: ${text}`);
+    throw new Error(`HA API error ${res.status} at ${url}: ${text}`);
   }
   return (await res.json()) as T;
 }
@@ -57,17 +94,24 @@ async function renderHomeAssistantTemplate<T>(
   ha: HaConnectionLike,
   template: string
 ): Promise<T> {
-  const res = await fetch(`${ha.baseUrl}/api/template`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${ha.longLivedToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ template }),
-  });
+  const path = '/api/template';
+  const url = buildHaUrl(ha.baseUrl, path);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ha.longLivedToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ template }),
+    });
+  } catch (err) {
+    throw describeNetworkFailure(ha.baseUrl, path, err);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA template error ${res.status}: ${text}`);
+    throw new Error(`HA template error ${res.status} at ${url}: ${text}`);
   }
   return (await res.json()) as T;
 }
@@ -129,18 +173,24 @@ export async function callHaService(
   service: string,
   data: Record<string, unknown> = {}
 ) {
-  const url = `${ha.baseUrl}/api/services/${domain}/${service}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${ha.longLivedToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
+  const path = `/api/services/${domain}/${service}`;
+  const url = buildHaUrl(ha.baseUrl, path);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ha.longLivedToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    throw describeNetworkFailure(ha.baseUrl, path, err);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA service error ${res.status}: ${text}`);
+    throw new Error(`HA service error ${res.status} at ${url}: ${text}`);
   }
   try {
     return await res.json();

@@ -1,5 +1,5 @@
 // src/screens/AdminDashboardScreen.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet, Button } from 'react-native';
 import { useSession } from '../store/sessionStore';
 import { fetchDevicesForUser } from '../api/dinodia';
@@ -15,20 +15,37 @@ export function AdminDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-
-  async function load() {
-    setError(null);
-    try {
-      const list = await fetchDevicesForUser(userId);
-      setDevices(list);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load devices');
-    }
-  }
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    void load();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      const list = await fetchDevicesForUser(userId);
+      if (!isMountedRef.current) return;
+      setDevices(list);
+      setError(null);
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      const message = err instanceof Error ? err.message : 'Failed to load devices';
+      setError(message);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void refreshDevices();
+    const interval = setInterval(() => {
+      void refreshDevices();
+    }, 2000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshDevices]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -77,8 +94,11 @@ export function AdminDashboardScreen() {
           refreshing={refreshing}
           onRefresh={async () => {
             setRefreshing(true);
-            await load();
-            setRefreshing(false);
+            try {
+              await refreshDevices();
+            } finally {
+              setRefreshing(false);
+            }
           }}
         />
       }
@@ -98,7 +118,12 @@ export function AdminDashboardScreen() {
           <Text style={styles.groupTitle}>{group}</Text>
           <View style={styles.grid}>
             {groups.get(group)!.map((device) => (
-              <DeviceCard key={device.entityId} device={device} isAdmin />
+              <DeviceCard
+                key={device.entityId}
+                device={device}
+                isAdmin
+                onAfterCommand={refreshDevices}
+              />
             ))}
           </View>
         </View>

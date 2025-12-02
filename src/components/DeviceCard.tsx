@@ -9,9 +9,10 @@ import { useSession } from '../store/sessionStore';
 type Props = {
   device: UIDevice;
   isAdmin: boolean;
+  onAfterCommand?: () => Promise<void> | void;
 };
 
-export function DeviceCard({ device }: Props) {
+export function DeviceCard({ device, onAfterCommand }: Props) {
   const label = getPrimaryLabel(device);
   const area = device.area ?? device.areaName ?? '';
   const { session } = useSession();
@@ -31,7 +32,9 @@ export function DeviceCard({ device }: Props) {
         command: primaryAction.command,
         value: primaryAction.value,
       });
-      // For simplicity, we rely on pull-to-refresh; you could trigger a reload here.
+      if (onAfterCommand) {
+        await Promise.resolve(onAfterCommand());
+      }
     } catch (err) {
       console.log('device command error', err);
       const message =
