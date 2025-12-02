@@ -1,6 +1,6 @@
 // src/components/DeviceCard.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import type { UIDevice } from '../models/device';
 import { getPrimaryLabel } from '../utils/deviceLabels';
 import { handleDeviceCommand } from '../utils/haCommands';
@@ -32,8 +32,15 @@ export function DeviceCard({ device }: Props) {
         value: primaryAction.value,
       });
       // For simplicity, we rely on pull-to-refresh; you could trigger a reload here.
-    } catch {
-      // TODO: Show toast/error
+    } catch (err) {
+      console.log('device command error', err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : 'Unable to send command';
+      Alert.alert('Action failed', message);
     }
   }
 

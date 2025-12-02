@@ -1,18 +1,20 @@
 // src/screens/AdminDashboardScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, RefreshControl, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, StyleSheet, Button } from 'react-native';
 import { useSession } from '../store/sessionStore';
 import { fetchDevicesForUser } from '../api/dinodia';
 import type { UIDevice } from '../models/device';
 import { getGroupLabel, sortLabels, normalizeLabel } from '../utils/deviceLabels';
 import { DeviceCard } from '../components/DeviceCard';
+import { logoutRemote } from '../api/auth';
 
 export function AdminDashboardScreen() {
-  const { session } = useSession();
+  const { session, clearSession } = useSession();
   const userId = session.user?.id!;
   const [devices, setDevices] = useState<UIDevice[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   async function load() {
     setError(null);
@@ -27,6 +29,17 @@ export function AdminDashboardScreen() {
   useEffect(() => {
     void load();
   }, []);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logoutRemote().catch(() => undefined);
+    } finally {
+      await clearSession();
+      setLoggingOut(false);
+    }
+  };
 
   const visibleDevices = useMemo(
     () =>
@@ -70,7 +83,14 @@ export function AdminDashboardScreen() {
         />
       }
     >
-      <Text style={styles.header}>Welcome, {session.user?.username}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Welcome, {session.user?.username}</Text>
+        <Button
+          title={loggingOut ? 'Logging out…' : 'Logout'}
+          onPress={handleLogout}
+          disabled={loggingOut}
+        />
+      </View>
       {error && <Text style={styles.error}>{error}</Text>}
 
       {sortedGroupNames.map((group) => (
@@ -89,7 +109,13 @@ export function AdminDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  header: { fontSize: 20, fontWeight: '600', marginBottom: 16 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  header: { fontSize: 20, fontWeight: '600' },
   error: { color: 'red', marginBottom: 8 },
   group: { marginBottom: 24 },
   groupTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
