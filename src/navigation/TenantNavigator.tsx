@@ -13,17 +13,9 @@ const Stack = createNativeStackNavigator<TenantStackParamList>();
 
 export function TenantNavigator() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen
-        name="TenantDashboard"
-        component={TenantDashboardScreen}
-        options={{ title: 'Dinodia Tenant' }}
-      />
-      <Stack.Screen
-        name="TenantSettings"
-        component={TenantSettingsScreen}
-        options={{ title: 'Settings' }}
-      />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="TenantDashboard" component={TenantDashboardScreen} />
+      <Stack.Screen name="TenantSettings" component={TenantSettingsScreen} />
     </Stack.Navigator>
   );
 }

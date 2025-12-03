@@ -19,6 +19,7 @@ const LOGIN_PATH = '/auth-login'; // implemented on backend (Edge Function)
 
 async function apiFetch<T>(path: string, options: RequestInit): Promise<T> {
   const url = `${ENV.AUTH_BASE_URL}${path}`;
+  console.log('[auth] fetch', url, options);
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -30,6 +31,7 @@ async function apiFetch<T>(path: string, options: RequestInit): Promise<T> {
   });
   const data = (await res.json().catch(() => ({}))) as T;
   if (!res.ok) {
+    console.log('[auth] fetch failed', res.status, data);
     throw new Error((data as any).error || `HTTP ${res.status}`);
   }
   return data;

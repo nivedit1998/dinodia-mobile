@@ -13,17 +13,9 @@ const Stack = createNativeStackNavigator<AdminStackParamList>();
 
 export function AdminNavigator() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen
-        name="AdminDashboard"
-        component={AdminDashboardScreen}
-        options={{ title: 'Dinodia Admin' }}
-      />
-      <Stack.Screen
-        name="AdminSettings"
-        component={AdminSettingsScreen}
-        options={{ title: 'Settings' }}
-      />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+      <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
     </Stack.Navigator>
   );
 }

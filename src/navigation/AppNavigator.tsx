@@ -17,16 +17,8 @@ export function AppNavigator() {
   const role = session.user?.role;
 
   if (role === 'ADMIN') {
-    return (
-      <Tab.Navigator screenOptions={{ headerShown: false }}>
-        <Tab.Screen name="Admin" component={AdminNavigator} />
-      </Tab.Navigator>
-    );
+    return <AdminNavigator />;
   }
 
-  return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Tenant" component={TenantNavigator} />
-    </Tab.Navigator>
-  );
+  return <TenantNavigator />;
 }

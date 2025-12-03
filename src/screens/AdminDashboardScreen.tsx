@@ -7,6 +7,7 @@ import type { UIDevice } from '../models/device';
 import { getGroupLabel, sortLabels, normalizeLabel } from '../utils/deviceLabels';
 import { DeviceCard } from '../components/DeviceCard';
 import { logoutRemote } from '../api/auth';
+import { DeviceDetail } from '../components/DeviceDetail';
 
 export function AdminDashboardScreen() {
   const { session, clearSession } = useSession();
@@ -16,6 +17,8 @@ export function AdminDashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const isMountedRef = useRef(true);
+  const [selected, setSelected] = useState<UIDevice | null>(null);
+  const [headerArea, setHeaderArea] = useState<string>('All Areas');
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -29,6 +32,9 @@ export function AdminDashboardScreen() {
       const list = await fetchDevicesForUser(userId);
       if (!isMountedRef.current) return;
       setDevices(list);
+      setSelected((prev) => (prev ? list.find((d) => d.entityId === prev.entityId) ?? prev : null));
+      const firstArea = list.find((d) => (d.area ?? d.areaName ?? '').trim().length > 0);
+      setHeaderArea(firstArea?.area ?? firstArea?.areaName ?? 'All Areas');
       setError(null);
     } catch (err) {
       if (!isMountedRef.current) return;
@@ -104,7 +110,7 @@ export function AdminDashboardScreen() {
       }
     >
       <View style={styles.headerRow}>
-        <Text style={styles.header}>Welcome, {session.user?.username}</Text>
+        <Text style={styles.header}>{headerArea}</Text>
         <Button
           title={loggingOut ? 'Logging out…' : 'Logout'}
           onPress={handleLogout}
@@ -115,7 +121,10 @@ export function AdminDashboardScreen() {
 
       {sortedGroupNames.map((group) => (
         <View key={group} style={styles.group}>
-          <Text style={styles.groupTitle}>{group}</Text>
+          <View style={styles.groupHeader}>
+            <Text style={styles.groupTitle}>{group}</Text>
+            {refreshing && <Text style={styles.refreshing}>Refreshing…</Text>}
+          </View>
           <View style={styles.grid}>
             {groups.get(group)!.map((device) => (
               <DeviceCard
@@ -123,17 +132,29 @@ export function AdminDashboardScreen() {
                 device={device}
                 isAdmin
                 onAfterCommand={refreshDevices}
+                onOpenDetails={setSelected}
               />
             ))}
           </View>
         </View>
       ))}
+      <DeviceDetail
+        device={selected}
+        visible={!!selected}
+        onClose={() => setSelected(null)}
+        onCommandComplete={refreshDevices}
+        relatedDevices={
+          selected && selected.label === 'Home Security'
+            ? devices.filter((d) => d.label === 'Home Security')
+            : undefined
+        }
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  container: { flex: 1, padding: 16, backgroundColor: '#f5f5f7' },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -143,6 +164,8 @@ const styles = StyleSheet.create({
   header: { fontSize: 20, fontWeight: '600' },
   error: { color: 'red', marginBottom: 8 },
   group: { marginBottom: 24 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   groupTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  refreshing: { fontSize: 12, color: '#9ca3af' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
 });
