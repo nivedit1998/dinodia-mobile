@@ -1,57 +1,21 @@
 // src/screens/AdminDashboardScreen.tsx
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, RefreshControl, StyleSheet, Button } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Button, SectionList } from 'react-native';
 import { useSession } from '../store/sessionStore';
-import { fetchDevicesForUser } from '../api/dinodia';
 import type { UIDevice } from '../models/device';
-import { getGroupLabel, sortLabels, normalizeLabel } from '../utils/deviceLabels';
+import { normalizeLabel } from '../utils/deviceLabels';
 import { DeviceCard } from '../components/DeviceCard';
 import { logoutRemote } from '../api/auth';
 import { DeviceDetail } from '../components/DeviceDetail';
+import { useDevices } from '../store/deviceStore';
+import { buildDeviceSections, DeviceRow, DeviceSection } from '../utils/deviceSections';
 
 export function AdminDashboardScreen() {
   const { session, clearSession } = useSession();
   const userId = session.user?.id!;
-  const [devices, setDevices] = useState<UIDevice[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { devices, refreshing, error, refreshDevices, lastUpdated } = useDevices(userId);
   const [loggingOut, setLoggingOut] = useState(false);
-  const isMountedRef = useRef(true);
   const [selected, setSelected] = useState<UIDevice | null>(null);
-  const [headerArea, setHeaderArea] = useState<string>('All Areas');
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const refreshDevices = useCallback(async () => {
-    try {
-      const list = await fetchDevicesForUser(userId);
-      if (!isMountedRef.current) return;
-      setDevices(list);
-      setSelected((prev) => (prev ? list.find((d) => d.entityId === prev.entityId) ?? prev : null));
-      const firstArea = list.find((d) => (d.area ?? d.areaName ?? '').trim().length > 0);
-      setHeaderArea(firstArea?.area ?? firstArea?.areaName ?? 'All Areas');
-      setError(null);
-    } catch (err) {
-      if (!isMountedRef.current) return;
-      const message = err instanceof Error ? err.message : 'Failed to load devices';
-      setError(message);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void refreshDevices();
-    const interval = setInterval(() => {
-      void refreshDevices();
-    }, 2000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshDevices]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -63,6 +27,14 @@ export function AdminDashboardScreen() {
       setLoggingOut(false);
     }
   };
+
+  useEffect(() => {
+    if (!selected) return;
+    const updated = devices.find((d) => d.entityId === selected.entityId);
+    if (updated && updated !== selected) {
+      setSelected(updated);
+    }
+  }, [devices, selected]);
 
   const visibleDevices = useMemo(
     () =>
@@ -77,84 +49,112 @@ export function AdminDashboardScreen() {
     [devices]
   );
 
-  const groups = useMemo(() => {
-    const map = new Map<string, UIDevice[]>();
-    for (const d of visibleDevices) {
-      const key = getGroupLabel(d);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(d);
-    }
-    return map;
+  const headerArea = useMemo(() => {
+    const firstArea = visibleDevices.find((d) => (d.area ?? d.areaName ?? '').trim().length > 0);
+    return firstArea?.area ?? firstArea?.areaName ?? 'All Areas';
   }, [visibleDevices]);
 
-  const sortedGroupNames = useMemo(
-    () => sortLabels(Array.from(groups.keys())),
-    [groups]
+  const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
+
+  const handleRefresh = useCallback(() => {
+    void refreshDevices();
+  }, [refreshDevices]);
+  const handleBackgroundRefresh = useCallback(() => {
+    void refreshDevices({ background: true });
+  }, [refreshDevices]);
+  const handleOpenDetails = useCallback((device: UIDevice) => setSelected(device), []);
+  const handleCloseDetails = useCallback(() => setSelected(null), []);
+  const handleCommandComplete = useCallback(
+    () => handleBackgroundRefresh(),
+    [handleBackgroundRefresh]
   );
 
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            try {
-              await refreshDevices();
-            } finally {
-              setRefreshing(false);
-            }
-          }}
-        />
-      }
-    >
-      <View style={styles.headerRow}>
-        <Text style={styles.header}>{headerArea}</Text>
-        <Button
-          title={loggingOut ? 'Logging out…' : 'Logout'}
-          onPress={handleLogout}
-          disabled={loggingOut}
-        />
+  const renderDeviceRow = useCallback(
+    ({ item }: { item: DeviceRow }) => (
+      <View style={styles.deviceRow}>
+        {item.devices.map((device) => (
+          <View key={device.entityId} style={styles.cardWrapper}>
+            <DeviceCard
+              device={device}
+              isAdmin
+              onAfterCommand={handleBackgroundRefresh}
+              onOpenDetails={handleOpenDetails}
+            />
+          </View>
+        ))}
+        {item.devices.length === 1 && <View style={styles.cardPlaceholder} />}
       </View>
-      {error && <Text style={styles.error}>{error}</Text>}
+    ),
+    [handleBackgroundRefresh, handleOpenDetails]
+  );
 
-      {sortedGroupNames.map((group) => (
-        <View key={group} style={styles.group}>
-          <View style={styles.groupHeader}>
-            <Text style={styles.groupTitle}>{group}</Text>
-            {refreshing && <Text style={styles.refreshing}>Refreshing…</Text>}
-          </View>
-          <View style={styles.grid}>
-            {groups.get(group)!.map((device) => (
-              <DeviceCard
-                key={device.entityId}
-                device={device}
-                isAdmin
-                onAfterCommand={refreshDevices}
-                onOpenDetails={setSelected}
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: DeviceSection }) => (
+      <View style={styles.groupHeader}>
+        <Text style={styles.groupTitle}>{section.title}</Text>
+        {refreshing && <Text style={styles.refreshing}>Refreshing…</Text>}
+      </View>
+    ),
+    [refreshing]
+  );
+
+  const isColdStart = !lastUpdated && devices.length === 0 && !error;
+
+  return (
+    <>
+      <SectionList
+        style={styles.list}
+        sections={sections}
+        keyExtractor={(item) => item.key}
+        renderItem={renderDeviceRow}
+        renderSectionHeader={renderSectionHeader}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.headerContainer}>
+            <View style={styles.headerRow}>
+              <Text style={styles.header}>{headerArea}</Text>
+              <Button
+                title={loggingOut ? 'Logging out…' : 'Logout'}
+                onPress={handleLogout}
+                disabled={loggingOut}
               />
-            ))}
+            </View>
+            {error && <Text style={styles.error}>{error}</Text>}
           </View>
-        </View>
-      ))}
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              {isColdStart ? 'Loading devices…' : 'No devices available.'}
+            </Text>
+          </View>
+        }
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={10}
+        windowSize={5}
+        removeClippedSubviews
+      />
       <DeviceDetail
         device={selected}
         visible={!!selected}
-        onClose={() => setSelected(null)}
-        onCommandComplete={refreshDevices}
+        onClose={handleCloseDetails}
+        onCommandComplete={handleCommandComplete}
         relatedDevices={
           selected && selected.label === 'Home Security'
             ? devices.filter((d) => d.label === 'Home Security')
             : undefined
         }
       />
-    </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f5f5f7' },
+  list: { flex: 1, backgroundColor: '#f5f5f7' },
+  listContent: { padding: 16, backgroundColor: '#f5f5f7' },
+  headerContainer: { marginBottom: 8 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -163,9 +163,12 @@ const styles = StyleSheet.create({
   },
   header: { fontSize: 20, fontWeight: '600' },
   error: { color: 'red', marginBottom: 8 },
-  group: { marginBottom: 24 },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   groupTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   refreshing: { fontSize: 12, color: '#9ca3af' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  deviceRow: { flexDirection: 'row', marginBottom: 12 },
+  cardWrapper: { flex: 1, marginRight: 8 },
+  cardPlaceholder: { flex: 1, marginRight: 8 },
+  emptyState: { paddingVertical: 32, alignItems: 'center' },
+  emptyText: { color: '#6b7280' },
 });

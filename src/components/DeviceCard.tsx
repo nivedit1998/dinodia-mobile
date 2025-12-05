@@ -1,5 +1,5 @@
 // src/components/DeviceCard.tsx
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import type { UIDevice } from '../models/device';
 import { getPrimaryLabel } from '../utils/deviceLabels';
@@ -14,7 +14,7 @@ type Props = {
   onOpenDetails?: (device: UIDevice) => void;
 };
 
-export function DeviceCard({ device, onAfterCommand, onOpenDetails }: Props) {
+export const DeviceCard = memo(function DeviceCard({ device, onAfterCommand, onOpenDetails }: Props) {
   const label = getPrimaryLabel(device);
   const { session } = useSession();
   const [pending, setPending] = useState(false);
@@ -89,7 +89,7 @@ export function DeviceCard({ device, onAfterCommand, onOpenDetails }: Props) {
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 type PrimaryAction = { command: string; value?: number } | null;
 
@@ -153,7 +153,7 @@ function getSecondaryLine(device: UIDevice): string {
 
 const styles = StyleSheet.create({
   card: {
-    width: '47%',
+    width: '100%',
     borderRadius: 24,
     padding: 14,
     marginBottom: 12,

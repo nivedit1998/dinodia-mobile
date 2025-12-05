@@ -1,7 +1,6 @@
 // src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, NativeModules } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { loginWithCredentials } from '../api/auth';
 import { getUserWithHaConnection } from '../api/dinodia';
 import { useSession } from '../store/sessionStore';
@@ -13,7 +12,6 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { setSession } = useSession();
-  const navigation = useNavigation();
 
   const handleOpenWifiSetup = () => {
     if (InlineWifiSetupLauncher && typeof InlineWifiSetupLauncher.open === 'function') {
@@ -24,9 +22,15 @@ export function LoginScreen() {
   };
 
   async function handleLogin() {
+    if (loading) return;
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || !password) {
+      Alert.alert('Login', 'Please enter both username and password.');
+      return;
+    }
     setLoading(true);
     try {
-      const user = await loginWithCredentials(username.trim(), password);
+      const user = await loginWithCredentials(trimmedUsername, password);
       const { haConnection } = await getUserWithHaConnection(user.id);
       await setSession({ user, haConnection });
       // Navigation container will switch from Auth to App automatically
