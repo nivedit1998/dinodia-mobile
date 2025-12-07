@@ -31,8 +31,8 @@ export function buildDeviceSections(devices: UIDevice[]): DeviceSection[] {
     if (list.length === 0) continue;
 
     const rows: DeviceRow[] = [];
-    for (let i = 0; i < list.length; i += 2) {
-      const slice = list.slice(i, i + 2);
+    for (let i = 0; i < list.length; i += 4) {
+      const slice = list.slice(i, i + 4);
       const rowKey = `${label}-${slice.map((d) => d.entityId).join('|')}`;
       rows.push({ key: rowKey, devices: slice });
     }

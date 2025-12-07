@@ -1,14 +1,22 @@
 // src/screens/TenantDashboardScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Button, SectionList } from 'react-native';
+import { View, Text, StyleSheet, Button, SectionList, Alert, NativeModules, TouchableOpacity } from 'react-native';
 import { useSession } from '../store/sessionStore';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
 import { logoutRemote } from '../api/auth';
 import { DeviceCard } from '../components/DeviceCard';
+import type { DeviceCardSize } from '../components/DeviceCard';
 import { DeviceDetail } from '../components/DeviceDetail';
-import { useDevices } from '../store/deviceStore';
+import { useDevices, clearDeviceCacheForUserAndMode } from '../store/deviceStore';
+import type { HaMode } from '../api/dinodia';
 import { buildDeviceSections, DeviceRow, DeviceSection } from '../utils/deviceSections';
+import { getPrimaryLabel } from '../utils/deviceLabels';
+import { HeaderMenu } from '../components/HeaderMenu';
+
+const { InlineWifiSetupLauncher } = NativeModules as {
+  InlineWifiSetupLauncher?: { open?: () => void };
+};
 
 function isDetailDevice(state: string) {
   const trimmed = (state ?? '').toString().trim();
@@ -19,11 +27,13 @@ function isDetailDevice(state: string) {
 }
 
 export function TenantDashboardScreen() {
-  const { session, clearSession } = useSession();
+  const { session, clearSession, haMode, setHaMode } = useSession();
   const userId = session.user?.id!;
-  const { devices, refreshing, error, refreshDevices, lastUpdated } = useDevices(userId);
+  const { devices, refreshing, error, refreshDevices, lastUpdated } = useDevices(userId, haMode);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [selected, setSelected] = useState<UIDevice | null>(null);
+  const isCloud = haMode === 'cloud';
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -43,6 +53,10 @@ export function TenantDashboardScreen() {
       setSelected(updated);
     }
   }, [devices, selected]);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [haMode]);
 
   const visibleDevices = useMemo(
     () =>
@@ -77,21 +91,48 @@ export function TenantDashboardScreen() {
     () => handleBackgroundRefresh(),
     [handleBackgroundRefresh]
   );
+  const handleToggleMode = useCallback(() => {
+    const nextMode: HaMode = isCloud ? 'home' : 'cloud';
+    void clearDeviceCacheForUserAndMode(userId, nextMode)
+      .catch(() => undefined)
+      .then(() => {
+        setHaMode(nextMode);
+      });
+  }, [isCloud, setHaMode, userId]);
+
+  const handleOpenWifiSetup = useCallback(() => {
+    if (InlineWifiSetupLauncher && typeof InlineWifiSetupLauncher.open === 'function') {
+      InlineWifiSetupLauncher.open();
+    } else {
+      Alert.alert('Wi-Fi', 'Wi-Fi setup is not available on this device.');
+    }
+  }, []);
+
+  useEffect(() => {
+    // When mode changes, force a non-background refresh for the new mode.
+    void refreshDevices();
+  }, [haMode, refreshDevices]);
+
+  const showRefreshingLabel = refreshing && devices.length === 0;
 
   const renderDeviceRow = useCallback(
     ({ item }: { item: DeviceRow }) => (
       <View style={styles.deviceRow}>
-        {item.devices.map((device) => (
-          <View key={device.entityId} style={styles.cardWrapper}>
-            <DeviceCard
-              device={device}
-              isAdmin={false}
-              onAfterCommand={handleBackgroundRefresh}
-              onOpenDetails={handleOpenDetails}
-            />
-          </View>
-        ))}
-        {item.devices.length === 1 && <View style={styles.cardPlaceholder} />}
+        {item.devices.map((device) => {
+          const label = getPrimaryLabel(device);
+          const size: DeviceCardSize = label === 'Spotify' ? 'medium' : 'small';
+          return (
+            <View key={device.entityId} style={styles.cardWrapper}>
+              <DeviceCard
+                device={device}
+                isAdmin={false}
+                size={size}
+                onAfterCommand={handleBackgroundRefresh}
+                onOpenDetails={handleOpenDetails}
+              />
+            </View>
+          );
+        })}
       </View>
     ),
     [handleBackgroundRefresh, handleOpenDetails]
@@ -101,13 +142,15 @@ export function TenantDashboardScreen() {
     ({ section }: { section: DeviceSection }) => (
       <View style={styles.groupHeader}>
         <Text style={styles.groupTitle}>{section.title}</Text>
-        {refreshing && <Text style={styles.refreshing}>Refreshing…</Text>}
+        {showRefreshingLabel && <Text style={styles.refreshing}>Refreshing…</Text>}
       </View>
     ),
-    [refreshing]
+    [showRefreshingLabel]
   );
 
   const isColdStart = !lastUpdated && devices.length === 0 && !error;
+  const showErrorEmpty = !!error && devices.length === 0;
+  const modeLabel = isCloud ? 'Cloud Mode' : 'Home Mode';
 
   return (
     <>
@@ -121,12 +164,14 @@ export function TenantDashboardScreen() {
         ListHeaderComponent={
           <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
-              <Text style={styles.header}>{headerArea}</Text>
-              <Button
-                title={loggingOut ? 'Logging out…' : 'Logout'}
-                onPress={handleLogout}
-                disabled={loggingOut}
-              />
+              <Text style={styles.header}>{`${headerArea} • ${modeLabel}`}</Text>
+              <TouchableOpacity
+                style={styles.menuIconButton}
+                onPress={() => setMenuVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.menuIconText}>⋯</Text>
+              </TouchableOpacity>
             </View>
             {error && <Text style={styles.error}>{error}</Text>}
           </View>
@@ -134,7 +179,11 @@ export function TenantDashboardScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>
-              {isColdStart ? 'Loading devices…' : 'No devices available.'}
+              {isColdStart
+                ? 'Loading devices…'
+                : showErrorEmpty
+                ? 'Unable to reach devices. Please check your connection or HA URL.'
+                : 'No devices available.'}
             </Text>
           </View>
         }
@@ -156,6 +205,14 @@ export function TenantDashboardScreen() {
             : undefined
         }
       />
+      <HeaderMenu
+        visible={menuVisible}
+        isCloud={isCloud}
+        onClose={() => setMenuVisible(false)}
+        onToggleMode={handleToggleMode}
+        onOpenWifi={handleOpenWifiSetup}
+        onLogout={handleLogout}
+      />
     </>
   );
 }
@@ -170,14 +227,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
+  headerButtons: { flexDirection: 'row', alignItems: 'center' },
+  headerButton: { flexShrink: 0 },
+  headerButtonSpacing: { marginLeft: 8 },
   header: { fontSize: 20, fontWeight: '600' },
   error: { color: 'red', marginBottom: 8 },
+  menuIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e5e7eb',
+  },
+  menuIconText: { fontSize: 20, color: '#111827', marginTop: -2 },
   groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   groupTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   refreshing: { fontSize: 12, color: '#9ca3af' },
-  deviceRow: { flexDirection: 'row', marginBottom: 12 },
-  cardWrapper: { flex: 1, marginRight: 8 },
-  cardPlaceholder: { flex: 1, marginRight: 8 },
+  deviceRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
+  cardWrapper: { width: '25%', paddingHorizontal: 4, paddingVertical: 6 },
+  cardPlaceholder: { width: '25%', paddingHorizontal: 4, paddingVertical: 6 },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#6b7280' },
 });
