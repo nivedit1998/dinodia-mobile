@@ -41,7 +41,6 @@ function buildHaUrl(baseUrl: string, path: string): string {
 }
 
 function describeNetworkFailure(baseUrl: string, path: string, err: unknown): Error {
-  const url = buildHaUrl(baseUrl, path);
   const original = err instanceof Error ? err.message : String(err);
   const hints: string[] = [];
   try {
@@ -61,57 +60,85 @@ function describeNetworkFailure(baseUrl: string, path: string, err: unknown): Er
     // ignore parsing issues; baseUrl should already be valid
   }
   const hintText = hints.length > 0 ? ` ${hints.join(' ')}` : '';
-  return new Error(`HA network error while calling ${url}: ${original}.${hintText}`);
+  return new Error(`HA network error: ${original}.${hintText}`);
+}
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 5000
+): Promise<Response> {
+  if (timeoutMs <= 0) {
+    return fetch(url, options);
+  }
+
+  if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  // Fallback: no AbortController support; race manually without cancelling.
+  return await Promise.race([
+    fetch(url, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Network timeout')), timeoutMs)
+    ),
+  ]);
 }
 
 async function callHomeAssistantAPI<T>(
   ha: HaConnectionLike,
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs = 5000
 ): Promise<T> {
-  const url = buildHaUrl(ha.baseUrl, path);
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(buildHaUrl(ha.baseUrl, path), {
       ...init,
       headers: {
         Authorization: `Bearer ${ha.longLivedToken}`,
         'Content-Type': 'application/json',
         ...(init?.headers || {}),
       },
-    });
+    }, timeoutMs);
   } catch (err) {
     throw describeNetworkFailure(ha.baseUrl, path, err);
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA API error ${res.status} at ${url}: ${text}`);
+    throw new Error(`HA API error ${res.status}: ${text}`);
   }
   return (await res.json()) as T;
 }
 
 async function renderHomeAssistantTemplate<T>(
   ha: HaConnectionLike,
-  template: string
+  template: string,
+  timeoutMs = 5000
 ): Promise<T> {
   const path = '/api/template';
-  const url = buildHaUrl(ha.baseUrl, path);
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(buildHaUrl(ha.baseUrl, path), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${ha.longLivedToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ template }),
-    });
+    }, timeoutMs);
   } catch (err) {
     throw describeNetworkFailure(ha.baseUrl, path, err);
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA template error ${res.status} at ${url}: ${text}`);
+    throw new Error(`HA template error ${res.status}: ${text}`);
   }
   return (await res.json()) as T;
 }
@@ -171,31 +198,54 @@ export async function callHaService(
   ha: HaConnectionLike,
   domain: string,
   service: string,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
+  timeoutMs = 5000
 ) {
   const path = `/api/services/${domain}/${service}`;
-  const url = buildHaUrl(ha.baseUrl, path);
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(buildHaUrl(ha.baseUrl, path), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${ha.longLivedToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
-    });
+    }, timeoutMs);
   } catch (err) {
     throw describeNetworkFailure(ha.baseUrl, path, err);
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA service error ${res.status} at ${url}: ${text}`);
+    throw new Error(`HA service error ${res.status}: ${text}`);
   }
   try {
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+export async function probeHaReachability(
+  ha: HaConnectionLike,
+  timeoutMs = 2000
+): Promise<boolean> {
+  const url = buildHaUrl(ha.baseUrl, '/api/');
+  try {
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${ha.longLivedToken}`,
+        },
+      },
+      timeoutMs
+    );
+    // Any HTTP response means the host is reachable; content not important here.
+    return res.status > 0;
+  } catch {
+    return false;
   }
 }
 

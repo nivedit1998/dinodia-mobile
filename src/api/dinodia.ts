@@ -5,8 +5,10 @@ import type { Role } from '../models/roles';
 import type { HaConnection } from '../models/haConnection';
 import type { AccessRule } from '../models/accessRule';
 import type { UIDevice, DeviceOverride } from '../models/device';
-import { getDevicesWithMetadata, EnrichedDevice, HaConnectionLike } from './ha';
+import { getDevicesWithMetadata, EnrichedDevice, HaConnectionLike, probeHaReachability } from './ha';
 import { classifyDeviceByLabel } from '../utils/labelCatalog';
+
+export type HaMode = 'home' | 'cloud';
 
 type UserWithRelations = User & {
   accessRules?: AccessRule[];
@@ -115,12 +117,33 @@ export async function getUserWithHaConnection(
   return { user, haConnection };
 }
 
-export async function fetchDevicesForUser(userId: number): Promise<UIDevice[]> {
+export async function fetchDevicesForUser(
+  userId: number,
+  mode: HaMode = 'home'
+): Promise<UIDevice[]> {
   const { user, haConnection } = await getUserWithHaConnection(userId);
+  const rawUrl = mode === 'cloud' ? haConnection.cloudUrl : haConnection.baseUrl;
+  const baseUrl = (rawUrl ?? '').trim().replace(/\/+$/, '');
+
+  // If there is no URL for this mode, return an empty dashboard.
+  if (!baseUrl) {
+    return [];
+  }
+
   const haLike: HaConnectionLike = {
-    baseUrl: haConnection.baseUrl,
+    baseUrl,
     longLivedToken: haConnection.longLivedToken,
   };
+
+  // Fast reachability pre-check to fail quickly when HA is unreachable.
+  const reachable = await probeHaReachability(haLike, mode === 'home' ? 2000 : 4000);
+  if (!reachable) {
+    if (mode === 'home') {
+      throw new Error('Unable to reach Home Assistant on the local network.');
+    } else {
+      throw new Error('Unable to reach Home Assistant via cloud.');
+    }
+  }
 
   // 1) Fetch devices from HA
   let enriched: EnrichedDevice[] = [];
@@ -129,7 +152,8 @@ export async function fetchDevicesForUser(userId: number): Promise<UIDevice[]> {
   } catch (err) {
     console.error('Failed to fetch devices from HA:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
-    throw new Error(`Failed to fetch HA devices: ${message}`);
+    // Let the hook handle the error and clear stale devices.
+    throw new Error(`Unable to reach Home Assistant: ${message}`);
   }
 
   // 2) Load overrides
@@ -247,6 +271,7 @@ export async function updateHaSettings(params: {
   adminId: number;
   haUsername: string;
   haBaseUrl: string;
+  haCloudUrl?: string;
   haPassword?: string;
   haLongLivedToken?: string;
 }): Promise<HaConnection> {
@@ -257,6 +282,10 @@ export async function updateHaSettings(params: {
     haUsername: params.haUsername.trim(),
     baseUrl: normalizedBaseUrl,
   };
+  if (params.haCloudUrl !== undefined) {
+    const trimmedCloud = params.haCloudUrl.trim();
+    (updateData as any).cloudUrl = trimmedCloud.length === 0 ? null : trimmedCloud.replace(/\/+$/, '');
+  }
   if (params.haPassword && params.haPassword.length > 0) {
     (updateData as any).haPassword = params.haPassword;
   }

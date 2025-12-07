@@ -16,6 +16,7 @@ export function AdminSettingsScreen() {
 
   const [haUsername, setHaUsername] = useState(haInitial?.haUsername ?? '');
   const [haBaseUrl, setHaBaseUrl] = useState(haInitial?.baseUrl ?? '');
+  const [haCloudUrl, setHaCloudUrl] = useState(haInitial?.cloudUrl ?? '');
   const [haPassword, setHaPassword] = useState('');
   const [haToken, setHaToken] = useState('');
 
@@ -42,11 +43,14 @@ export function AdminSettingsScreen() {
         adminId: user.id,
         haUsername,
         haBaseUrl,
+        haCloudUrl,
         haPassword,
         haLongLivedToken: haToken,
       });
       Alert.alert('Updated', 'Home Assistant settings updated');
       await setSession({ user, haConnection: updated });
+      setHaBaseUrl(updated.baseUrl);
+      setHaCloudUrl(updated.cloudUrl ?? '');
       setHaPassword('');
       setHaToken('');
     } catch (err) {
@@ -103,6 +107,13 @@ export function AdminSettingsScreen() {
           placeholder="HA base URL"
           value={haBaseUrl}
           onChangeText={setHaBaseUrl}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="HA cloud URL (Nabu Casa)"
+          value={haCloudUrl}
+          onChangeText={setHaCloudUrl}
+          autoCapitalize="none"
         />
         <TextInput
           style={styles.input}

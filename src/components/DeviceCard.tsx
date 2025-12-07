@@ -7,29 +7,73 @@ import { handleDeviceCommand } from '../utils/haCommands';
 import { useSession } from '../store/sessionStore';
 import { getDevicePreset, isDeviceActive } from './deviceVisuals';
 
+export type DeviceCardSize = 'small' | 'medium' | 'large';
+
 type Props = {
   device: UIDevice;
   isAdmin: boolean;
+  size?: DeviceCardSize;
   onAfterCommand?: () => Promise<void> | void;
   onOpenDetails?: (device: UIDevice) => void;
 };
 
-export const DeviceCard = memo(function DeviceCard({ device, onAfterCommand, onOpenDetails }: Props) {
+export const DeviceCard = memo(function DeviceCard({
+  device,
+  size = 'small',
+  onAfterCommand,
+  onOpenDetails,
+}: Props) {
   const label = getPrimaryLabel(device);
-  const { session } = useSession();
+  const { session, haMode } = useSession();
   const [pending, setPending] = useState(false);
-  const ha = {
-    baseUrl: session.haConnection!.baseUrl,
-    longLivedToken: session.haConnection!.longLivedToken,
-  };
+  const connection = session.haConnection;
+  const baseUrlRaw = haMode === 'cloud' ? connection?.cloudUrl ?? '' : connection?.baseUrl ?? '';
+  const baseUrl = baseUrlRaw.trim().replace(/\/+$/, '');
+  const ha =
+    baseUrl && connection
+      ? {
+          baseUrl,
+          longLivedToken: connection.longLivedToken,
+        }
+      : null;
 
   const primaryAction = getPrimaryAction(label, device);
   const preset = useMemo(() => getDevicePreset(label), [label]);
   const active = useMemo(() => isDeviceActive(label, device), [label, device]);
   const secondaryText = useMemo(() => getSecondaryLine(device), [device]);
 
+  const sizeStyles =
+    size === 'small'
+      ? { padding: 10, borderRadius: 16, minHeight: 80 }
+      : size === 'medium'
+      ? { padding: 14, borderRadius: 20, minHeight: 110 }
+      : { padding: 18, borderRadius: 24, minHeight: 140 };
+
+  const nameStyle =
+    size === 'small'
+      ? { fontSize: 13 }
+      : size === 'medium'
+      ? { fontSize: 14 }
+      : { fontSize: 16 };
+
+  const secondaryStyle =
+    size === 'small'
+      ? { fontSize: 11 }
+      : size === 'medium'
+      ? { fontSize: 12 }
+      : { fontSize: 13 };
+
   async function onPrimaryPress() {
     if (!primaryAction) return;
+    if (!ha) {
+      Alert.alert(
+        'Unavailable',
+        haMode === 'cloud'
+          ? 'Cloud control is not configured for this home.'
+          : 'Local Home Assistant connection is not available.'
+      );
+      return;
+    }
     if (pending) return;
     setPending(true);
     try {
@@ -54,38 +98,50 @@ export const DeviceCard = memo(function DeviceCard({ device, onAfterCommand, onO
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => onOpenDetails && onOpenDetails(device)}
+      onPress={() => {
+        onOpenDetails && onOpenDetails(device);
+      }}
       style={[
         styles.card,
+        sizeStyles,
         {
           backgroundColor: active ? preset.gradient[0] : preset.inactiveBackground,
           borderColor: active ? 'rgba(0,0,0,0.08)' : '#e5e7eb',
-          opacity: active ? 1 : 0.82,
+          opacity: active ? 1 : 0.9,
         },
       ]}
     >
       <View style={styles.topRow}>
         <Text style={[styles.label, { color: active ? '#0f172a' : '#9ca3af' }]}>{label}</Text>
-        <TouchableOpacity
-          onPress={primaryAction ? onPrimaryPress : undefined}
-          activeOpacity={0.8}
-          disabled={!primaryAction || pending}
-          style={[
-            styles.iconButton,
-            {
-              backgroundColor: active ? preset.iconActiveBackground : preset.iconInactiveBackground,
-              opacity: pending ? 0.6 : 1,
-            },
-          ]}
-        >
-          {pending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.icon}>{preset.icon}</Text>}
-        </TouchableOpacity>
       </View>
       <View style={styles.body}>
-        <Text style={[styles.name, { color: active ? '#0f172a' : '#94a3b8' }]}>{device.name}</Text>
-        <Text style={[styles.secondary, { color: active ? '#475569' : '#9ca3af' }]} numberOfLines={1}>
+        <Text style={[styles.name, nameStyle, { color: active ? '#0f172a' : '#94a3b8' }]}>
+          {device.name}
+        </Text>
+        <Text
+          style={[styles.secondary, secondaryStyle, { color: active ? '#475569' : '#9ca3af' }]}
+          numberOfLines={1}
+        >
           {secondaryText}
         </Text>
+        {primaryAction && (
+          <TouchableOpacity
+            onPress={onPrimaryPress}
+            activeOpacity={0.85}
+            disabled={pending}
+            style={[
+              styles.primaryActionButton,
+              { backgroundColor: active ? preset.iconActiveBackground : '#111827' },
+              pending && styles.primaryActionButtonDisabled,
+            ]}
+          >
+            {pending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.primaryActionText}>{`${preset.icon} Action`}</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -153,16 +209,15 @@ function getSecondaryLine(device: UIDevice): string {
 
 const styles = StyleSheet.create({
   card: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 8,
     borderWidth: 1,
-    elevation: 3,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   topRow: {
     flexDirection: 'row',
@@ -170,19 +225,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   label: { fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
-  iconButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-  },
   icon: { fontSize: 18, color: '#fff' },
-  body: { marginTop: 12 },
-  name: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  secondary: { fontSize: 12, color: '#4b5563', marginTop: 4 },
+  body: { marginTop: 8 },
+  name: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  secondary: { fontSize: 11, color: '#4b5563', marginTop: 4 },
+  primaryActionButton: {
+    marginTop: 10,
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  primaryActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  primaryActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
 });

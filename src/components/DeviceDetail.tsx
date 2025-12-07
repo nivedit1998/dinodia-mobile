@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import type { UIDevice } from '../models/device';
@@ -26,7 +27,7 @@ type Props = {
 };
 
 export function DeviceDetail({ device, visible, onClose, onCommandComplete, relatedDevices }: Props) {
-  const { session } = useSession();
+  const { session, haMode } = useSession();
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [cameraRefreshToken, setCameraRefreshToken] = useState<number>(Date.now());
 
@@ -35,11 +36,16 @@ export function DeviceDetail({ device, visible, onClose, onCommandComplete, rela
   const active = device ? isDeviceActive(label, device) : false;
   const area = device?.area ?? device?.areaName ?? '';
 
-  const ha = device
-    ? {
-        baseUrl: session.haConnection!.baseUrl,
-        longLivedToken: session.haConnection!.longLivedToken,
-      }
+  const connection = session.haConnection;
+
+  const ha = device && connection
+    ? (() => {
+        const rawUrl =
+          haMode === 'cloud' ? connection.cloudUrl ?? '' : connection.baseUrl ?? '';
+        const cleaned = rawUrl.trim().replace(/\/+$/, '');
+        if (!cleaned) return null;
+        return { baseUrl: cleaned, longLivedToken: connection.longLivedToken };
+      })()
     : null;
 
   useEffect(() => {
@@ -58,7 +64,16 @@ export function DeviceDetail({ device, visible, onClose, onCommandComplete, rela
       : '';
 
   async function sendCommand(command: string, value?: number) {
-    if (!device || !ha) return;
+    if (!device) return;
+    if (!ha) {
+      Alert.alert(
+        'Unavailable',
+        haMode === 'cloud'
+          ? 'Cloud control is not configured for this home.'
+          : 'Local Home Assistant connection is not available.'
+      );
+      return;
+    }
     if (pendingCommand) return;
     setPendingCommand(command);
     try {
@@ -84,6 +99,9 @@ export function DeviceDetail({ device, visible, onClose, onCommandComplete, rela
         <View />
       </Pressable>
       <View style={styles.sheet}>
+        <View style={styles.handleBarWrapper}>
+          <View style={styles.handleBar} />
+        </View>
         <View style={[styles.header, { backgroundColor: headerBg }]}>
           <View>
             <Text style={styles.label}>{label}</Text>
@@ -160,7 +178,9 @@ function renderControls(opts: {
                 maximumValue={100}
                 step={1}
                 value={brightnessPct}
-                onSlidingComplete={(val) => onCommand('light/set_brightness', val)}
+                onSlidingComplete={(val) => {
+                  onCommand('light/set_brightness', val);
+                }}
                 minimumTrackTintColor="#f59e0b"
                 maximumTrackTintColor="#e5e7eb"
                 thumbTintColor="#f59e0b"
@@ -246,7 +266,9 @@ function renderControls(opts: {
                 maximumValue={100}
                 step={1}
                 value={volumePct}
-                onSlidingComplete={(val) => onCommand('media/volume_set', val)}
+                onSlidingComplete={(val) => {
+                  onCommand('media/volume_set', val);
+                }}
                 minimumTrackTintColor="#4f46e5"
                 maximumTrackTintColor="#e5e7eb"
                 thumbTintColor="#4f46e5"
@@ -393,42 +415,53 @@ function getSecondaryLine(device: UIDevice): string {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: {
     position: 'absolute',
-    top: 60,
+    top: 80,
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#f5f5f7',
+    backgroundColor: '#f9fafb',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
   },
+  handleBarWrapper: {
+    paddingTop: 8,
+    alignItems: 'center',
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#d1d5db',
+  },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  label: { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: '#111827' },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 4 },
-  subtitle: { fontSize: 13, color: '#1f2937', marginTop: 4 },
-  secondary: { fontSize: 12, color: '#4b5563', marginTop: 6 },
+  label: { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: '#6b7280' },
+  title: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 2 },
+  subtitle: { fontSize: 13, color: '#4b5563', marginTop: 4 },
+  secondary: { fontSize: 12, color: '#6b7280', marginTop: 6 },
   headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerIconText: { fontSize: 22, color: '#fff' },
-  content: { padding: 16, paddingBottom: 60 },
-  section: { marginBottom: 16 },
-  row: { flexDirection: 'row', gap: 10 },
+  content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 },
+  section: { marginBottom: 18 },
+  row: { flexDirection: 'row', columnGap: 10 },
   primaryButton: {
     backgroundColor: '#111827',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 14,
     alignItems: 'center',
   },
@@ -436,7 +469,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flex: 1,
     backgroundColor: '#e5e7eb',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -446,7 +479,17 @@ const styles = StyleSheet.create({
   sliderLabel: { fontSize: 13, color: '#111827', marginBottom: 6 },
   titleSm: { fontSize: 18, fontWeight: '700', color: '#111827', marginTop: 8 },
   subtitleSm: { fontSize: 13, color: '#4b5563', marginTop: 4 },
-  artwork: { width: '100%', height: 160, borderRadius: 16, marginBottom: 12 },
+  artwork: {
+    width: '100%',
+    height: 170,
+    borderRadius: 18,
+    marginBottom: 12,
+    backgroundColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
   motionBadge: {
     paddingVertical: 16,
     borderRadius: 16,
@@ -454,12 +497,13 @@ const styles = StyleSheet.create({
   },
   motionText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   closeBtn: {
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     borderTopWidth: 1,
     borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
   },
-  closeText: { fontSize: 16, color: '#111827', fontWeight: '600' },
+  closeText: { fontSize: 15, color: '#111827', fontWeight: '600' },
   cameraCard: {
     borderRadius: 18,
     overflow: 'hidden',

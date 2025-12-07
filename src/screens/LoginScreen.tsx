@@ -4,6 +4,7 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, NativeModules } from 
 import { loginWithCredentials } from '../api/auth';
 import { getUserWithHaConnection } from '../api/dinodia';
 import { useSession } from '../store/sessionStore';
+import { clearAllDeviceCacheForUser } from '../store/deviceStore';
 
 const { InlineWifiSetupLauncher } = NativeModules;
 
@@ -31,6 +32,7 @@ export function LoginScreen() {
     setLoading(true);
     try {
       const user = await loginWithCredentials(trimmedUsername, password);
+      await clearAllDeviceCacheForUser(user.id);
       const { haConnection } = await getUserWithHaConnection(user.id);
       await setSession({ user, haConnection });
       // Navigation container will switch from Auth to App automatically
@@ -66,7 +68,13 @@ export function LoginScreen() {
         onChangeText={setPassword}
       />
 
-      <Button title={loading ? 'Logging in…' : 'Login'} onPress={handleLogin} disabled={loading} />
+      <Button
+        title={loading ? 'Logging in…' : 'Login'}
+        onPress={() => {
+          void handleLogin();
+        }}
+        disabled={loading}
+      />
 
       <View style={styles.wifiButton}>
         <Button title="Add Wi-Fi" onPress={handleOpenWifiSetup} />

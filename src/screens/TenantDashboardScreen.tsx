@@ -1,6 +1,6 @@
 // src/screens/TenantDashboardScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Button, SectionList, Alert, NativeModules, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Alert, NativeModules, TouchableOpacity, FlatList } from 'react-native';
 import { useSession } from '../store/sessionStore';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
@@ -10,13 +10,20 @@ import type { DeviceCardSize } from '../components/DeviceCard';
 import { DeviceDetail } from '../components/DeviceDetail';
 import { useDevices, clearDeviceCacheForUserAndMode } from '../store/deviceStore';
 import type { HaMode } from '../api/dinodia';
-import { buildDeviceSections, DeviceRow, DeviceSection } from '../utils/deviceSections';
-import { getPrimaryLabel } from '../utils/deviceLabels';
+import {
+  buildDeviceSections,
+  buildSectionLayoutRows,
+  getDeviceDimensions,
+  getDeviceLayoutSize,
+  LayoutRow,
+} from '../utils/deviceSections';
 import { HeaderMenu } from '../components/HeaderMenu';
 
 const { InlineWifiSetupLauncher } = NativeModules as {
   InlineWifiSetupLauncher?: { open?: () => void };
 };
+
+const CARD_BASE_ROW_HEIGHT = 130;
 
 function isDetailDevice(state: string) {
   const trimmed = (state ?? '').toString().trim();
@@ -78,6 +85,7 @@ export function TenantDashboardScreen() {
   }, [visibleDevices]);
 
   const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
+  const rows = useMemo(() => buildSectionLayoutRows(sections), [sections]);
 
   const handleRefresh = useCallback(() => {
     void refreshDevices();
@@ -113,39 +121,47 @@ export function TenantDashboardScreen() {
     void refreshDevices();
   }, [haMode, refreshDevices]);
 
-  const showRefreshingLabel = refreshing && devices.length === 0;
-
   const renderDeviceRow = useCallback(
-    ({ item }: { item: DeviceRow }) => (
+    ({ item }: { item: LayoutRow }) => (
       <View style={styles.deviceRow}>
-        {item.devices.map((device) => {
-          const label = getPrimaryLabel(device);
-          const size: DeviceCardSize = label === 'Spotify' ? 'medium' : 'small';
+        {item.sections.map((section) => {
+          const sectionWidth = `${section.span * 25}%`;
           return (
-            <View key={device.entityId} style={styles.cardWrapper}>
-              <DeviceCard
-                device={device}
-                isAdmin={false}
-                size={size}
-                onAfterCommand={handleBackgroundRefresh}
-                onOpenDetails={handleOpenDetails}
-              />
+            <View key={section.key} style={[styles.sectionContainer, { width: sectionWidth }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                {refreshing && devices.length === 0 && (
+                  <Text style={styles.refreshing}>Refreshing…</Text>
+                )}
+              </View>
+              <View style={styles.sectionCards}>
+                {section.devices.map((device) => {
+                  const size: DeviceCardSize = getDeviceLayoutSize(device);
+                  const { width: widthUnits, height: heightUnits } = getDeviceDimensions(size);
+                  const widthPercent = `${Math.min(100, (widthUnits / section.span) * 100)}%`;
+                  const minHeight = CARD_BASE_ROW_HEIGHT * heightUnits;
+                  return (
+                    <View
+                      key={device.entityId}
+                      style={[styles.cardWrapper, { width: widthPercent, minHeight }]}
+                    >
+                      <DeviceCard
+                        device={device}
+                        isAdmin={false}
+                        size={size}
+                        onAfterCommand={handleBackgroundRefresh}
+                        onOpenDetails={handleOpenDetails}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           );
         })}
       </View>
     ),
-    [handleBackgroundRefresh, handleOpenDetails]
-  );
-
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: DeviceSection }) => (
-      <View style={styles.groupHeader}>
-        <Text style={styles.groupTitle}>{section.title}</Text>
-        {showRefreshingLabel && <Text style={styles.refreshing}>Refreshing…</Text>}
-      </View>
-    ),
-    [showRefreshingLabel]
+    [devices.length, handleBackgroundRefresh, handleOpenDetails, refreshing]
   );
 
   const isColdStart = !lastUpdated && devices.length === 0 && !error;
@@ -154,12 +170,11 @@ export function TenantDashboardScreen() {
 
   return (
     <>
-      <SectionList
+      <FlatList
         style={styles.list}
-        sections={sections}
+        data={rows}
         keyExtractor={(item) => item.key}
         renderItem={renderDeviceRow}
-        renderSectionHeader={renderSectionHeader}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
@@ -189,7 +204,6 @@ export function TenantDashboardScreen() {
         }
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        stickySectionHeadersEnabled={false}
         initialNumToRender={10}
         windowSize={5}
         removeClippedSubviews
@@ -227,9 +241,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  headerButtons: { flexDirection: 'row', alignItems: 'center' },
-  headerButton: { flexShrink: 0 },
-  headerButtonSpacing: { marginLeft: 8 },
   header: { fontSize: 20, fontWeight: '600' },
   error: { color: 'red', marginBottom: 8 },
   menuIconButton: {
@@ -241,12 +252,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   menuIconText: { fontSize: 20, color: '#111827', marginTop: -2 },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  groupTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   refreshing: { fontSize: 12, color: '#9ca3af' },
-  deviceRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
-  cardWrapper: { width: '25%', paddingHorizontal: 4, paddingVertical: 6 },
-  cardPlaceholder: { width: '25%', paddingHorizontal: 4, paddingVertical: 6 },
+  deviceRow: { flexDirection: 'row', marginBottom: 12 },
+  sectionContainer: { paddingHorizontal: 4 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    backgroundColor: '#eef2f7',
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  sectionTitle: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  sectionCards: { flexDirection: 'row', flexWrap: 'wrap' },
+  cardWrapper: { paddingHorizontal: 4, paddingVertical: 6, flexShrink: 0 },
+  cardPlaceholder: { paddingHorizontal: 4, paddingVertical: 6 },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#6b7280' },
 });

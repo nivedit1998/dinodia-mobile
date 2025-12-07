@@ -1,8 +1,8 @@
 // src/store/deviceStore.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchDevicesForUser } from '../api/dinodia';
+import { fetchDevicesForUser, HaMode } from '../api/dinodia';
 import type { UIDevice } from '../models/device';
-import { loadJson, saveJson } from '../utils/storage';
+import { loadJson, saveJson, removeKey } from '../utils/storage';
 
 type DeviceCacheEntry = {
   devices: UIDevice[];
@@ -13,22 +13,23 @@ type RefreshOptions = {
   background?: boolean;
 };
 
-const memoryCache = new Map<number, DeviceCacheEntry>();
-const inFlight = new Map<number, Promise<DeviceCacheEntry>>();
-const cacheKey = (userId: number) => `dinodia_devices_${userId}`;
+const memoryCache = new Map<string, DeviceCacheEntry>();
+const inFlight = new Map<string, Promise<DeviceCacheEntry>>();
+const cacheKey = (userId: number, mode: HaMode) => `dinodia_devices_${userId}_${mode}`;
 
-async function readFromStorage(userId: number): Promise<DeviceCacheEntry | null> {
-  const existing = memoryCache.get(userId);
+async function readFromStorage(userId: number, mode: HaMode): Promise<DeviceCacheEntry | null> {
+  const key = cacheKey(userId, mode);
+  const existing = memoryCache.get(key);
   if (existing) return existing;
 
   try {
-    const stored = await loadJson<DeviceCacheEntry>(cacheKey(userId));
+    const stored = await loadJson<DeviceCacheEntry>(key);
     if (
       stored &&
       Array.isArray((stored as any).devices) &&
       typeof (stored as any).updatedAt === 'number'
     ) {
-      memoryCache.set(userId, stored);
+      memoryCache.set(key, stored);
       return stored;
     }
   } catch {
@@ -38,38 +39,41 @@ async function readFromStorage(userId: number): Promise<DeviceCacheEntry | null>
   return null;
 }
 
-async function persistCache(userId: number, entry: DeviceCacheEntry): Promise<void> {
-  memoryCache.set(userId, entry);
+async function persistCache(userId: number, mode: HaMode, entry: DeviceCacheEntry): Promise<void> {
+  const key = cacheKey(userId, mode);
+  memoryCache.set(key, entry);
   try {
-    await saveJson(cacheKey(userId), entry);
+    await saveJson(key, entry);
   } catch {
     // Ignore storage write failures to avoid blocking UI
   }
 }
 
-async function fetchAndCacheDevices(userId: number): Promise<DeviceCacheEntry> {
-  const ongoing = inFlight.get(userId);
+async function fetchAndCacheDevices(userId: number, mode: HaMode): Promise<DeviceCacheEntry> {
+  const key = cacheKey(userId, mode);
+  const ongoing = inFlight.get(key);
   if (ongoing) {
     return ongoing;
   }
 
   const request = (async () => {
-    const devices = await fetchDevicesForUser(userId);
+    const devices = await fetchDevicesForUser(userId, mode);
     const entry: DeviceCacheEntry = { devices, updatedAt: Date.now() };
-    await persistCache(userId, entry);
+    await persistCache(userId, mode, entry);
     return entry;
   })();
 
-  inFlight.set(userId, request);
+  inFlight.set(key, request);
   try {
     return await request;
   } finally {
-    inFlight.delete(userId);
+    inFlight.delete(key);
   }
 }
 
-export function useDevices(userId: number) {
-  const initial = useMemo(() => memoryCache.get(userId) ?? null, [userId]);
+export function useDevices(userId: number, mode: HaMode) {
+  const initialKey = useMemo(() => cacheKey(userId, mode), [mode, userId]);
+  const initial = useMemo(() => memoryCache.get(initialKey) ?? null, [initialKey]);
   const [devices, setDevices] = useState<UIDevice[]>(initial?.devices ?? []);
   const [lastUpdated, setLastUpdated] = useState<number | null>(initial?.updatedAt ?? null);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,23 +101,30 @@ export function useDevices(userId: number) {
       const silent = opts.background === true;
       if (!silent) setRefreshing(true);
       try {
-        const entry = await fetchAndCacheDevices(userId);
+        const entry = await fetchAndCacheDevices(userId, mode);
         updateState(entry);
         setError(null);
         return entry.devices;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load devices';
-        if (mountedRef.current) setError(message);
+        if (mountedRef.current) {
+          setError(message);
+          // Clear devices for this mode on error to avoid showing stale data.
+          const emptyEntry: DeviceCacheEntry = { devices: [], updatedAt: Date.now() };
+          await persistCache(userId, mode, emptyEntry);
+          updateState(emptyEntry);
+        }
         return null;
       } finally {
         if (mountedRef.current && !silent) setRefreshing(false);
       }
     },
-    [updateState, userId]
+    [mode, updateState, userId]
   );
 
   useEffect(() => {
-    const cached = memoryCache.get(userId);
+    const key = cacheKey(userId, mode);
+    const cached = memoryCache.get(key);
     if (cached) {
       setDevices(cached.devices);
       setLastUpdated(cached.updatedAt);
@@ -122,12 +133,12 @@ export function useDevices(userId: number) {
       setLastUpdated(null);
     }
     setError(null);
-  }, [userId]);
+  }, [mode, userId]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const cached = await readFromStorage(userId);
+      const cached = await readFromStorage(userId, mode);
       if (cancelled || !mountedRef.current) return;
       updateState(cached);
       await refreshDevices({ background: true });
@@ -141,7 +152,7 @@ export function useDevices(userId: number) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [refreshDevices, updateState, userId]);
+  }, [mode, refreshDevices, updateState, userId]);
 
   return {
     devices,
@@ -150,4 +161,25 @@ export function useDevices(userId: number) {
     error,
     refreshDevices,
   };
+}
+
+export async function clearDeviceCacheForUserAndMode(
+  userId: number,
+  mode: HaMode
+): Promise<void> {
+  const key = cacheKey(userId, mode);
+  memoryCache.delete(key);
+  inFlight.delete(key);
+  try {
+    await removeKey(key);
+  } catch {
+    // Ignore storage errors when clearing cache
+  }
+}
+
+export async function clearAllDeviceCacheForUser(userId: number): Promise<void> {
+  const modes: HaMode[] = ['home', 'cloud'];
+  for (const mode of modes) {
+    await clearDeviceCacheForUserAndMode(userId, mode);
+  }
 }
