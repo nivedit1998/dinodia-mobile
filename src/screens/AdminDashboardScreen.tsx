@@ -1,6 +1,16 @@
 // src/screens/AdminDashboardScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Alert, NativeModules, TouchableOpacity, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  NativeModules,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { useSession } from '../store/sessionStore';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
@@ -32,6 +42,8 @@ export function AdminDashboardScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selected, setSelected] = useState<UIDevice | null>(null);
+  const [selectedArea, setSelectedArea] = useState<string | 'ALL'>('ALL');
+  const [areaMenuVisible, setAreaMenuVisible] = useState(false);
   const isCloud = haMode === 'cloud';
 
   const handleLogout = async () => {
@@ -57,6 +69,17 @@ export function AdminDashboardScreen() {
     setSelected(null);
   }, [haMode]);
 
+  const areaOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of devices) {
+      const areaName = (d.area ?? d.areaName ?? '').trim();
+      if (areaName.length > 0) {
+        names.add(areaName);
+      }
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [devices]);
+
   const visibleDevices = useMemo(
     () =>
       devices.filter((d) => {
@@ -65,15 +88,20 @@ export function AdminDashboardScreen() {
         const hasLabel =
           normalizeLabel(d.label).length > 0 ||
           labels.some((lbl) => normalizeLabel(lbl).length > 0);
-        return areaName.length > 0 && hasLabel;
+
+        const matchesArea = selectedArea === 'ALL' ? true : areaName === selectedArea;
+
+        return areaName.length > 0 && hasLabel && matchesArea;
       }),
-    [devices]
+    [devices, selectedArea]
   );
 
-  const headerArea = useMemo(() => {
-    const firstArea = visibleDevices.find((d) => (d.area ?? d.areaName ?? '').trim().length > 0);
-    return firstArea?.area ?? firstArea?.areaName ?? 'All Areas';
-  }, [visibleDevices]);
+  useEffect(() => {
+    if (selectedArea === 'ALL') return;
+    if (!areaOptions.includes(selectedArea)) {
+      setSelectedArea('ALL');
+    }
+  }, [areaOptions, selectedArea]);
 
   const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
   const rows = useMemo(() => buildSectionLayoutRows(sections), [sections]);
@@ -159,6 +187,7 @@ export function AdminDashboardScreen() {
   const isColdStart = !lastUpdated && devices.length === 0 && !error;
   const showErrorEmpty = !!error && devices.length === 0;
   const modeLabel = isCloud ? 'Cloud Mode' : 'Home Mode';
+  const headerAreaLabel = selectedArea === 'ALL' ? 'All Areas' : selectedArea;
 
   return (
     <>
@@ -171,7 +200,15 @@ export function AdminDashboardScreen() {
         ListHeaderComponent={
           <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
-              <Text style={styles.header}>{`${headerArea} • ${modeLabel}`}</Text>
+              <View style={styles.headerTextGroup}>
+                <TouchableOpacity
+                  onPress={() => setAreaMenuVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.headerArea}>{headerAreaLabel}</Text>
+                </TouchableOpacity>
+                <Text style={styles.headerMode}>{` • ${modeLabel}`}</Text>
+              </View>
               <TouchableOpacity
                 style={styles.menuIconButton}
                 onPress={() => setMenuVisible(true)}
@@ -200,6 +237,58 @@ export function AdminDashboardScreen() {
         windowSize={5}
         removeClippedSubviews
       />
+      <Modal
+        visible={areaMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAreaMenuVisible(false)}
+      >
+        <Pressable style={styles.areaMenuBackdrop} onPress={() => setAreaMenuVisible(false)}>
+          <View />
+        </Pressable>
+        <View style={styles.areaMenuContainer}>
+          <View style={styles.areaMenuCard}>
+            <TouchableOpacity
+              style={styles.areaMenuItem}
+              onPress={() => {
+                setSelectedArea('ALL');
+                setAreaMenuVisible(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.areaMenuItemText,
+                  selectedArea === 'ALL' && styles.areaMenuItemSelected,
+                ]}
+              >
+                All Areas
+              </Text>
+            </TouchableOpacity>
+
+            {areaOptions.map((area) => (
+              <TouchableOpacity
+                key={area}
+                style={styles.areaMenuItem}
+                onPress={() => {
+                  setSelectedArea(area);
+                  setAreaMenuVisible(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.areaMenuItemText,
+                    selectedArea === area && styles.areaMenuItemSelected,
+                  ]}
+                >
+                  {area}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
       <DeviceDetail
         device={selected}
         visible={!!selected}
@@ -233,7 +322,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  header: { fontSize: 20, fontWeight: '600' },
+  headerTextGroup: { flexDirection: 'row', alignItems: 'center' },
+  headerArea: { fontSize: 20, fontWeight: '600', color: '#111827' },
+  headerMode: { fontSize: 20, fontWeight: '600', color: '#111827' },
   error: { color: 'red', marginBottom: 8 },
   menuIconButton: {
     width: 32,
@@ -263,4 +354,34 @@ const styles = StyleSheet.create({
   cardPlaceholder: { paddingHorizontal: 4, paddingVertical: 6 },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#6b7280' },
+  areaMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' },
+  areaMenuContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+  },
+  areaMenuCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 16,
+    paddingVertical: 8,
+    minWidth: 220,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  areaMenuItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  areaMenuItemText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  areaMenuItemSelected: {
+    fontWeight: '700',
+  },
 });
