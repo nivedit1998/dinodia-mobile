@@ -1,6 +1,7 @@
 // src/models/device.ts
 export type UIDevice = {
   entityId: string;
+  deviceId: string | null;
   name: string;
   state: string;
   area: string | null;

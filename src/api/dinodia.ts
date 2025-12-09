@@ -182,6 +182,7 @@ export async function fetchDevicesForUser(
 
     return {
       entityId: d.entityId,
+      deviceId: d.deviceId ?? null,
       name,
       state: d.state,
       area: areaName,

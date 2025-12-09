@@ -1,9 +1,20 @@
 // src/screens/TenantDashboardScreen.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Alert, NativeModules, TouchableOpacity, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  NativeModules,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { useSession } from '../store/sessionStore';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
+import { isDetailDevice } from '../utils/deviceKinds';
 import { logoutRemote } from '../api/auth';
 import { DeviceCard } from '../components/DeviceCard';
 import type { DeviceCardSize } from '../components/DeviceCard';
@@ -18,20 +29,15 @@ import {
   LayoutRow,
 } from '../utils/deviceSections';
 import { HeaderMenu } from '../components/HeaderMenu';
+import { loadJson, saveJson } from '../utils/storage';
 
 const { InlineWifiSetupLauncher } = NativeModules as {
   InlineWifiSetupLauncher?: { open?: () => void };
 };
 
 const CARD_BASE_ROW_HEIGHT = 130;
-
-function isDetailDevice(state: string) {
-  const trimmed = (state ?? '').toString().trim();
-  if (!trimmed) return false;
-  const isUnavailable = trimmed.toLowerCase() === 'unavailable';
-  const isNumeric = !Number.isNaN(Number(trimmed));
-  return isUnavailable || isNumeric;
-}
+const ALL_AREAS = 'ALL';
+const ALL_AREAS_LABEL = 'All Areas';
 
 export function TenantDashboardScreen() {
   const { session, clearSession, haMode, setHaMode } = useSession();
@@ -40,7 +46,11 @@ export function TenantDashboardScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selected, setSelected] = useState<UIDevice | null>(null);
+  const [selectedArea, setSelectedArea] = useState<string | typeof ALL_AREAS>(ALL_AREAS);
+  const [areaMenuVisible, setAreaMenuVisible] = useState(false);
+  const [areaPrefLoaded, setAreaPrefLoaded] = useState(false);
   const isCloud = haMode === 'cloud';
+  const areaStorageKey = useMemo(() => `tenant_selected_area_${userId}`, [userId]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -65,6 +75,41 @@ export function TenantDashboardScreen() {
     setSelected(null);
   }, [haMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await loadJson<string>(areaStorageKey);
+        if (!cancelled && typeof stored === 'string' && stored.length > 0) {
+          setSelectedArea(stored);
+        }
+      } catch {
+        // Ignore storage read errors
+      } finally {
+        if (!cancelled) setAreaPrefLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [areaStorageKey]);
+
+  useEffect(() => {
+    if (!areaPrefLoaded) return;
+    void saveJson(areaStorageKey, selectedArea).catch(() => undefined);
+  }, [areaPrefLoaded, areaStorageKey, selectedArea]);
+
+  const areaOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of devices) {
+      const areaName = (d.area ?? d.areaName ?? '').trim();
+      if (areaName.length > 0) {
+        names.add(areaName);
+      }
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [devices]);
+
   const visibleDevices = useMemo(
     () =>
       devices.filter((d) => {
@@ -74,15 +119,18 @@ export function TenantDashboardScreen() {
           normalizeLabel(d.label).length > 0 ||
           labels.some((lbl) => normalizeLabel(lbl).length > 0);
         const primary = !isDetailDevice(d.state);
-        return areaName.length > 0 && hasLabel && primary;
+        const matchesArea = selectedArea === ALL_AREAS ? true : areaName === selectedArea;
+        return areaName.length > 0 && hasLabel && primary && matchesArea;
       }),
-    [devices]
+    [devices, selectedArea]
   );
 
-  const headerArea = useMemo(() => {
-    const firstArea = visibleDevices.find((d) => (d.area ?? d.areaName ?? '').trim().length > 0);
-    return firstArea?.area ?? firstArea?.areaName ?? 'My Area';
-  }, [visibleDevices]);
+  useEffect(() => {
+    if (selectedArea === ALL_AREAS) return;
+    if (!areaOptions.includes(selectedArea)) {
+      setSelectedArea(ALL_AREAS);
+    }
+  }, [areaOptions, selectedArea]);
 
   const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
   const rows = useMemo(() => buildSectionLayoutRows(sections), [sections]);
@@ -167,6 +215,7 @@ export function TenantDashboardScreen() {
   const isColdStart = !lastUpdated && devices.length === 0 && !error;
   const showErrorEmpty = !!error && devices.length === 0;
   const modeLabel = isCloud ? 'Cloud Mode' : 'Home Mode';
+  const headerAreaLabel = selectedArea === ALL_AREAS ? ALL_AREAS_LABEL : selectedArea;
 
   return (
     <>
@@ -179,7 +228,15 @@ export function TenantDashboardScreen() {
         ListHeaderComponent={
           <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
-              <Text style={styles.header}>{`${headerArea} • ${modeLabel}`}</Text>
+              <View style={styles.headerTextGroup}>
+                <TouchableOpacity
+                  onPress={() => setAreaMenuVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.headerArea}>{headerAreaLabel}</Text>
+                </TouchableOpacity>
+                <Text style={styles.headerMode}>{` • ${modeLabel}`}</Text>
+              </View>
               <TouchableOpacity
                 style={styles.menuIconButton}
                 onPress={() => setMenuVisible(true)}
@@ -208,6 +265,58 @@ export function TenantDashboardScreen() {
         windowSize={5}
         removeClippedSubviews
       />
+      <Modal
+        visible={areaMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAreaMenuVisible(false)}
+      >
+        <Pressable style={styles.areaMenuBackdrop} onPress={() => setAreaMenuVisible(false)}>
+          <View />
+        </Pressable>
+        <View style={styles.areaMenuContainer}>
+          <View style={styles.areaMenuCard}>
+            <TouchableOpacity
+              style={styles.areaMenuItem}
+              onPress={() => {
+                setSelectedArea(ALL_AREAS);
+                setAreaMenuVisible(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.areaMenuItemText,
+                  selectedArea === ALL_AREAS && styles.areaMenuItemSelected,
+                ]}
+              >
+                {ALL_AREAS_LABEL}
+              </Text>
+            </TouchableOpacity>
+
+            {areaOptions.map((area) => (
+              <TouchableOpacity
+                key={area}
+                style={styles.areaMenuItem}
+                onPress={() => {
+                  setSelectedArea(area);
+                  setAreaMenuVisible(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.areaMenuItemText,
+                    selectedArea === area && styles.areaMenuItemSelected,
+                  ]}
+                >
+                  {area}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
       <DeviceDetail
         device={selected}
         visible={!!selected}
@@ -241,7 +350,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  header: { fontSize: 20, fontWeight: '600' },
+  headerTextGroup: { flexDirection: 'row', alignItems: 'center' },
+  headerArea: { fontSize: 20, fontWeight: '600', color: '#111827' },
+  headerMode: { fontSize: 20, fontWeight: '600', color: '#111827' },
   error: { color: 'red', marginBottom: 8 },
   menuIconButton: {
     width: 32,
@@ -271,4 +382,34 @@ const styles = StyleSheet.create({
   cardPlaceholder: { paddingHorizontal: 4, paddingVertical: 6 },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#6b7280' },
+  areaMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' },
+  areaMenuContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+  },
+  areaMenuCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 16,
+    paddingVertical: 8,
+    minWidth: 220,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  areaMenuItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  areaMenuItemText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  areaMenuItemSelected: {
+    fontWeight: '700',
+  },
 });

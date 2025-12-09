@@ -27,6 +27,7 @@ import {
   getDeviceLayoutSize,
   LayoutRow,
 } from '../utils/deviceSections';
+import { isSensorDevice } from '../utils/deviceKinds';
 import { HeaderMenu } from '../components/HeaderMenu';
 
 const { InlineWifiSetupLauncher } = NativeModules as {
@@ -94,6 +95,19 @@ export function AdminDashboardScreen() {
         return areaName.length > 0 && hasLabel && matchesArea;
       }),
     [devices, selectedArea]
+  );
+
+  const linkedSensors = useMemo(
+    () =>
+      selected?.deviceId
+        ? devices.filter(
+            (d) =>
+              d.deviceId === selected.deviceId &&
+              d.entityId !== selected.entityId &&
+              isSensorDevice(d)
+          )
+        : [],
+    [devices, selected]
   );
 
   useEffect(() => {
@@ -299,6 +313,7 @@ export function AdminDashboardScreen() {
             ? devices.filter((d) => d.label === 'Home Security')
             : undefined
         }
+        linkedSensors={linkedSensors}
       />
       <HeaderMenu
         visible={menuVisible}

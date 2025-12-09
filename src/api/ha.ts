@@ -19,6 +19,7 @@ export type TemplateDeviceMeta = {
   entity_id: string;
   area_name: string | null;
   labels: string[];
+  device_id: string | null;
 };
 
 export type EnrichedDevice = {
@@ -30,6 +31,7 @@ export type EnrichedDevice = {
   labelCategory: LabelCategory | null;
   domain: string;
   attributes: Record<string, unknown>;
+  deviceId: string | null;
 };
 
 function buildHaUrl(baseUrl: string, path: string): string {
@@ -153,6 +155,7 @@ export async function getDevicesWithMetadata(
   {% set item = {
     "entity_id": s.entity_id,
     "area_name": area_name(s.entity_id),
+    "device_id": device_id(s.entity_id),
     "labels": (labels(s.entity_id) | map('label_name') | list)
   } %}
   {% set ns.result = ns.result + [item] %}
@@ -174,6 +177,10 @@ export async function getDevicesWithMetadata(
   return states.map((s) => {
     const domain = s.entity_id.split('.')[0] || '';
     const metaEntry = metaByEntity.get(s.entity_id);
+    const deviceId =
+      metaEntry && typeof metaEntry.device_id === 'string' && metaEntry.device_id.trim().length > 0
+        ? metaEntry.device_id
+        : null;
     const labels = (metaEntry?.labels ?? []).filter(
       (label): label is string =>
         typeof label === 'string' && label.trim().length > 0
@@ -190,6 +197,7 @@ export async function getDevicesWithMetadata(
       labelCategory,
       domain,
       attributes: s.attributes ?? {},
+      deviceId,
     };
   });
 }

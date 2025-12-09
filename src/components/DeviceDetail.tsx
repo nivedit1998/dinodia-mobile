@@ -24,9 +24,17 @@ type Props = {
   onClose: () => void;
   onCommandComplete?: () => void | Promise<void>;
   relatedDevices?: UIDevice[];
+  linkedSensors?: UIDevice[];
 };
 
-export function DeviceDetail({ device, visible, onClose, onCommandComplete, relatedDevices }: Props) {
+export function DeviceDetail({
+  device,
+  visible,
+  onClose,
+  onCommandComplete,
+  relatedDevices,
+  linkedSensors,
+}: Props) {
   const { session, haMode } = useSession();
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [cameraRefreshToken, setCameraRefreshToken] = useState<number>(Date.now());
@@ -35,6 +43,7 @@ export function DeviceDetail({ device, visible, onClose, onCommandComplete, rela
   const preset = useMemo(() => getDevicePreset(label), [label]);
   const active = device ? isDeviceActive(label, device) : false;
   const area = device?.area ?? device?.areaName ?? '';
+  const sensors = linkedSensors ?? [];
 
   const connection = session.haConnection;
 
@@ -125,6 +134,7 @@ export function DeviceDetail({ device, visible, onClose, onCommandComplete, rela
               cameraUrlBuilder: buildCameraUrl,
               relatedDevices,
             })}
+          {device && sensors.length > 0 && renderLinkedSensors(sensors)}
         </ScrollView>
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
           <Text style={styles.closeText}>Close</Text>
@@ -387,6 +397,27 @@ function renderControls(opts: {
   }
 }
 
+function renderLinkedSensors(sensors: UIDevice[]) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionHeading}>Linked sensors</Text>
+      <View style={styles.sensorList}>
+        {sensors.map((sensor) => (
+          <View key={sensor.entityId} style={styles.sensorRow}>
+            <View style={styles.sensorDot} />
+            <View style={styles.sensorTextGroup}>
+              <Text style={styles.sensorName} numberOfLines={1}>
+                {sensor.name}
+              </Text>
+              <Text style={styles.sensorValue}>{formatSensorValue(sensor)}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function getBrightnessPct(attrs: Record<string, any>): number | null {
   if (typeof attrs.brightness_pct === 'number') return Math.round(attrs.brightness_pct);
   if (typeof attrs.brightness === 'number') return Math.round((attrs.brightness / 255) * 100);
@@ -412,6 +443,19 @@ function getSecondaryLine(device: UIDevice): string {
     return state === 'playing' ? 'Playing' : state === 'paused' ? 'Paused' : state;
   }
   return state;
+}
+
+function formatSensorValue(sensor: UIDevice): string {
+  const state = (sensor.state ?? '').toString();
+  const attrs = sensor.attributes ?? {};
+  const unit =
+    attrs && typeof (attrs as Record<string, unknown>).unit_of_measurement === 'string'
+      ? String((attrs as Record<string, unknown>).unit_of_measurement)
+      : '';
+  if (!state) return '—';
+  if (state.toLowerCase() === 'unavailable') return 'Unavailable';
+  if (unit) return `${state} ${unit}`.trim();
+  return state.charAt(0).toUpperCase() + state.slice(1);
 }
 
 const styles = StyleSheet.create({
@@ -458,6 +502,7 @@ const styles = StyleSheet.create({
   headerIconText: { fontSize: 22, color: '#fff' },
   content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 },
   section: { marginBottom: 18 },
+  sectionHeading: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 10 },
   row: { flexDirection: 'row', columnGap: 10 },
   primaryButton: {
     backgroundColor: '#111827',
@@ -496,6 +541,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   motionText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  sensorList: { gap: 8 },
+  sensorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  sensorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#60a5fa',
+    marginRight: 12,
+  },
+  sensorTextGroup: { flex: 1 },
+  sensorName: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  sensorValue: { fontSize: 12, color: '#4b5563', marginTop: 2 },
   closeBtn: {
     paddingVertical: 12,
     alignItems: 'center',
