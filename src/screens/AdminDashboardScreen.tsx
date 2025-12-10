@@ -29,6 +29,7 @@ import {
 } from '../utils/deviceSections';
 import { isSensorDevice } from '../utils/deviceKinds';
 import { HeaderMenu } from '../components/HeaderMenu';
+import { SpotifyCard } from '../components/SpotifyCard';
 
 const { InlineWifiSetupLauncher } = NativeModules as {
   InlineWifiSetupLauncher?: { open?: () => void };
@@ -204,7 +205,7 @@ export function AdminDashboardScreen() {
   const headerAreaLabel = selectedArea === 'ALL' ? 'All Areas' : selectedArea;
 
   return (
-    <>
+    <View style={styles.screen}>
       <FlatList
         style={styles.list}
         data={rows}
@@ -324,11 +325,13 @@ export function AdminDashboardScreen() {
         onOpenWifi={handleOpenWifiSetup}
         onLogout={handleLogout}
       />
-    </>
+      <SpotifyCard />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#f5f5f7' },
   list: { flex: 1, backgroundColor: '#f5f5f7' },
   listContent: { padding: 16, backgroundColor: '#f5f5f7' },
   headerContainer: { marginBottom: 8 },

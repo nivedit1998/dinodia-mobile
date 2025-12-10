@@ -29,6 +29,7 @@ import {
   LayoutRow,
 } from '../utils/deviceSections';
 import { HeaderMenu } from '../components/HeaderMenu';
+import { SpotifyCard } from '../components/SpotifyCard';
 import { loadJson, saveJson } from '../utils/storage';
 
 const { InlineWifiSetupLauncher } = NativeModules as {
@@ -231,7 +232,7 @@ export function TenantDashboardScreen() {
   const headerAreaLabel = selectedArea === ALL_AREAS ? ALL_AREAS_LABEL : selectedArea;
 
   return (
-    <>
+    <View style={styles.screen}>
       <FlatList
         style={styles.list}
         data={rows}
@@ -278,6 +279,7 @@ export function TenantDashboardScreen() {
         windowSize={5}
         removeClippedSubviews
       />
+      <SpotifyCard />
       <Modal
         visible={areaMenuVisible}
         transparent
@@ -351,11 +353,12 @@ export function TenantDashboardScreen() {
         onOpenWifi={handleOpenWifiSetup}
         onLogout={handleLogout}
       />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#f5f5f7' },
   list: { flex: 1, backgroundColor: '#f5f5f7' },
   listContent: { padding: 16, backgroundColor: '#f5f5f7' },
   headerContainer: { marginBottom: 8 },
