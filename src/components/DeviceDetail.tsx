@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import type { UIDevice } from '../models/device';
+import { fetchSensorHistoryForCurrentUser, HistoryPoint } from '../api/monitoringHistory';
 import { getPrimaryLabel } from '../utils/deviceLabels';
 import { handleDeviceCommand } from '../utils/haCommands';
 import { useSession } from '../store/sessionStore';
@@ -25,6 +26,7 @@ type Props = {
   onCommandComplete?: () => void | Promise<void>;
   relatedDevices?: UIDevice[];
   linkedSensors?: UIDevice[];
+  allowSensorHistory?: boolean;
 };
 
 export function DeviceDetail({
@@ -34,6 +36,7 @@ export function DeviceDetail({
   onCommandComplete,
   relatedDevices,
   linkedSensors,
+  allowSensorHistory,
 }: Props) {
   const { session, haMode } = useSession();
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
@@ -44,6 +47,7 @@ export function DeviceDetail({
   const active = device ? isDeviceActive(label, device) : false;
   const area = device?.area ?? device?.areaName ?? '';
   const sensors = linkedSensors ?? [];
+  const canShowHistory = Boolean(allowSensorHistory && session.user);
 
   const connection = session.haConnection;
 
@@ -134,7 +138,9 @@ export function DeviceDetail({
               cameraUrlBuilder: buildCameraUrl,
               relatedDevices,
             })}
-          {device && sensors.length > 0 && renderLinkedSensors(sensors)}
+          {device && sensors.length > 0 && (
+            <LinkedSensorList sensors={sensors} canShowHistory={canShowHistory} userId={session.user?.id} />
+          )}
         </ScrollView>
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
           <Text style={styles.closeText}>Close</Text>
@@ -397,22 +403,164 @@ function renderControls(opts: {
   }
 }
 
-function renderLinkedSensors(sensors: UIDevice[]) {
+function LinkedSensorList({
+  sensors,
+  canShowHistory,
+  userId,
+}: {
+  sensors: UIDevice[];
+  canShowHistory: boolean;
+  userId?: number | null;
+}) {
+  type SensorHistoryBucket = 'daily' | 'weekly' | 'monthly';
+  type SensorHistoryState = {
+    expanded: boolean;
+    bucket: SensorHistoryBucket;
+    loading: boolean;
+    error: string | null;
+    unit: string | null;
+    points: HistoryPoint[] | null;
+  };
+
+  const [sensorHistory, setSensorHistory] = useState<Record<string, SensorHistoryState>>({});
+
+  function ensureState(entityId: string) {
+    setSensorHistory((s) => {
+      if (s[entityId]) return s;
+      return {
+        ...s,
+        [entityId]: {
+          expanded: false,
+          bucket: 'daily',
+          loading: false,
+          error: null,
+          unit: null,
+          points: null,
+        },
+      };
+    });
+  }
+
+  useEffect(() => {
+    sensors.forEach((s) => ensureState(s.entityId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sensors.map((s) => s.entityId).join('|')]);
+
+  async function loadHistoryFor(entityId: string, bucket: SensorHistoryBucket) {
+    if (!userId) return;
+    setSensorHistory((prev) => ({
+      ...prev,
+      [entityId]: { ...(prev[entityId] ?? { expanded: true, bucket }), loading: true, error: null, points: null, unit: null },
+    }));
+    try {
+      const res = await fetchSensorHistoryForCurrentUser(userId, entityId, bucket);
+      setSensorHistory((prev) => ({
+        ...prev,
+        [entityId]: { ...(prev[entityId] ?? {} as any), loading: false, error: null, points: res.points, unit: res.unit, bucket },
+      }));
+    } catch (err: any) {
+      setSensorHistory((prev) => ({
+        ...prev,
+        [entityId]: { ...(prev[entityId] ?? {} as any), loading: false, error: err?.message ?? String(err), points: [], unit: null, bucket },
+      }));
+    }
+  }
+
+  function toggleExpand(entityId: string) {
+    setSensorHistory((prev) => {
+      const cur = prev[entityId] ?? { expanded: false, bucket: 'daily', loading: false, error: null, unit: null, points: null };
+      const next = { ...cur, expanded: !cur.expanded };
+      return { ...prev, [entityId]: next };
+    });
+    const state = sensorHistory[entityId];
+    const willExpand = !(state?.expanded ?? false);
+    if (willExpand && (!state || state.points === null)) {
+      const bucket = state?.bucket ?? 'daily';
+      void loadHistoryFor(entityId, bucket);
+    }
+  }
+
+  function changeBucket(entityId: string, bucket: SensorHistoryBucket) {
+    setSensorHistory((prev) => ({ ...prev, [entityId]: { ...(prev[entityId] ?? {} as any), bucket, loading: true, error: null } }));
+    void loadHistoryFor(entityId, bucket);
+  }
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionHeading}>Linked sensors</Text>
       <View style={styles.sensorList}>
-        {sensors.map((sensor) => (
-          <View key={sensor.entityId} style={styles.sensorRow}>
-            <View style={styles.sensorDot} />
-            <View style={styles.sensorTextGroup}>
-              <Text style={styles.sensorName} numberOfLines={1}>
-                {sensor.name}
-              </Text>
-              <Text style={styles.sensorValue}>{formatSensorValue(sensor)}</Text>
+        {sensors.map((sensor) => {
+          const st = sensorHistory[sensor.entityId] ?? { expanded: false, bucket: 'daily', loading: false, error: null, unit: null, points: null };
+          return (
+            <View key={sensor.entityId}>
+              <TouchableOpacity
+                activeOpacity={canShowHistory ? 0.7 : 1}
+                onPress={() => {
+                  if (canShowHistory) toggleExpand(sensor.entityId);
+                }}
+                style={styles.sensorRow}
+              >
+                <View style={styles.sensorDot} />
+                <View style={styles.sensorTextGroup}>
+                  <Text style={styles.sensorName} numberOfLines={1}>
+                    {sensor.name}
+                  </Text>
+                  <Text style={styles.sensorValue}>{formatSensorValue(sensor)}</Text>
+                </View>
+                {canShowHistory && (
+                  <View style={{ marginLeft: 8 }}>
+                    <Text style={{ color: '#6b7280', fontSize: 13 }}>{st.expanded ? 'Hide' : 'History'}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {st.expanded && (
+                <View style={styles.historyBlock}>
+                  <Text style={styles.historyHeader}>History</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    {(['daily', 'weekly', 'monthly'] as SensorHistoryBucket[]).map((b) => {
+                      const selected = st.bucket === b;
+                      return (
+                        <TouchableOpacity
+                          key={b}
+                          onPress={() => changeBucket(sensor.entityId, b)}
+                          style={[
+                            styles.bucketBtn,
+                            selected ? styles.bucketBtnSelected : undefined,
+                          ]}
+                        >
+                          <Text style={selected ? styles.bucketBtnTextSelected : styles.bucketBtnText}>
+                            {b.charAt(0).toUpperCase() + b.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.historyList}>
+                    {st.loading && <Text style={styles.secondary}>Loading…</Text>}
+                    {!st.loading && st.error && <Text style={styles.errorText}>{st.error}</Text>}
+                    {!st.loading && !st.error && st.points && st.points.length === 0 && (
+                      <Text style={styles.secondary}>No history yet.</Text>
+                    )}
+                    {!st.loading && !st.error && st.points && st.points.length > 0 && (
+                      <ScrollView style={{ maxHeight: 220 }}>
+                        {st.points.map((p) => (
+                          <View key={p.bucketStart} style={styles.historyRow}>
+                            <Text style={styles.historyLabel}>{p.label}</Text>
+                            <Text style={styles.historyValue}>
+                              {Number.isFinite(p.value) ? p.value.toFixed(2) : String(p.value)}{st.unit ? ` ${st.unit}` : ''}
+                            </Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -603,4 +751,33 @@ const styles = StyleSheet.create({
   },
   cameraThumb: { width: '100%', height: 140, backgroundColor: '#f3f4f6' },
   cameraName: { padding: 8, fontSize: 12, color: '#111827' },
+  historyBlock: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  historyHeader: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 6 },
+  bucketBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  bucketBtnSelected: { backgroundColor: '#111827' },
+  bucketBtnText: { color: '#111827', fontWeight: '600' },
+  bucketBtnTextSelected: { color: '#fff', fontWeight: '600' },
+  historyList: { marginTop: 6 },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: '#f3f4f6',
+  },
+  historyLabel: { color: '#374151' },
+  historyValue: { color: '#111827', fontWeight: '700' },
+  errorText: { color: '#ef4444' },
 });

@@ -14,7 +14,7 @@ import {
 import { useSession } from '../store/sessionStore';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
-import { isDetailDevice } from '../utils/deviceKinds';
+import { isDetailDevice, isSensorDevice } from '../utils/deviceKinds';
 import { logoutRemote } from '../api/auth';
 import { DeviceCard } from '../components/DeviceCard';
 import type { DeviceCardSize } from '../components/DeviceCard';
@@ -134,6 +134,19 @@ export function TenantDashboardScreen() {
 
   const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
   const rows = useMemo(() => buildSectionLayoutRows(sections), [sections]);
+
+  const linkedSensors = useMemo(
+    () =>
+      selected?.deviceId
+        ? devices.filter(
+            (d) =>
+              d.deviceId === selected.deviceId &&
+              d.entityId !== selected.entityId &&
+              isSensorDevice(d)
+          )
+        : [],
+    [devices, selected]
+  );
 
   const handleRefresh = useCallback(() => {
     void refreshDevices();
@@ -327,6 +340,8 @@ export function TenantDashboardScreen() {
             ? devices.filter((d) => d.label === 'Home Security')
             : undefined
         }
+        linkedSensors={linkedSensors}
+        allowSensorHistory
       />
       <HeaderMenu
         visible={menuVisible}

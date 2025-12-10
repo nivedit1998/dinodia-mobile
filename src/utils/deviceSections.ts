@@ -1,6 +1,6 @@
 // src/utils/deviceSections.ts
 import type { UIDevice } from '../models/device';
-import { getGroupLabel, getPrimaryLabel, sortLabels } from './deviceLabels';
+import { getGroupLabel, getPrimaryLabel, sortLabels, OTHER_LABEL } from './deviceLabels';
 
 export type DeviceLayoutSize = 'small' | 'medium' | 'large';
 
@@ -55,6 +55,8 @@ export function buildDeviceSections(devices: UIDevice[]): DeviceSection[] {
   const sortedLabels = sortLabels(Array.from(groups.keys()));
 
   for (const label of sortedLabels) {
+    if (label === OTHER_LABEL) continue;
+
     const list = groups.get(label) ?? [];
     if (list.length === 0) continue;
 

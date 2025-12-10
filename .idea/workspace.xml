@@ -5,20 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0a9d71a4-99eb-45c0-bc58-03e4bcdc96e5" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/dinodia.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/dinodia.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/ha.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/ha.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/DeviceCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/DeviceCard.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/DeviceDetail.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/DeviceDetail.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/models/haConnection.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/models/haConnection.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/AdminDashboardScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/AdminDashboardScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/AdminSettingsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/AdminSettingsScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/LoginScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/TenantDashboardScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/TenantDashboardScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/deviceStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/deviceStore.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/sessionStore.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/sessionStore.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/deviceSections.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/deviceSections.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

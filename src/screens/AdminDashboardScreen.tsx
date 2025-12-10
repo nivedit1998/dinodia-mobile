@@ -314,6 +314,7 @@ export function AdminDashboardScreen() {
             : undefined
         }
         linkedSensors={linkedSensors}
+        allowSensorHistory={true}
       />
       <HeaderMenu
         visible={menuVisible}
