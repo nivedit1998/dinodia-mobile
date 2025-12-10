@@ -138,7 +138,12 @@ export const DeviceCard = memo(function DeviceCard({
             {pending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.primaryActionText}>{`${preset.icon} Action`}</Text>
+              <View style={styles.primaryActionContent}>
+                <Text style={styles.primaryActionIcon}>{preset.icon}</Text>
+                <Text style={styles.primaryActionText}>
+                  {primaryActionLabel(label, device)}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
         )}
@@ -166,6 +171,35 @@ function getPrimaryAction(label: string, device: UIDevice): PrimaryAction {
       return { command: 'speaker/toggle_power' };
     default:
       return null;
+  }
+}
+
+function primaryActionLabel(label: string, device: UIDevice): string {
+  switch (label) {
+    case 'Light':
+      return 'Toggle light';
+    case 'Blind': {
+      const state = (device.state ?? '').toString().toLowerCase();
+      const isOpen = state === 'open' || state === 'opening' || state === 'on';
+      return isOpen ? 'Close blinds' : 'Open blinds';
+    }
+    case 'Spotify': {
+      const state = (device.state ?? '').toString().toLowerCase();
+      const isPlaying = state === 'playing';
+      return isPlaying ? 'Pause' : 'Play';
+    }
+    case 'TV': {
+      const state = (device.state ?? '').toString().toLowerCase();
+      const isOn = state === 'on';
+      return isOn ? 'Turn off TV' : 'Turn on TV';
+    }
+    case 'Speaker': {
+      const state = (device.state ?? '').toString().toLowerCase();
+      const isOn = state === 'on' || state === 'playing';
+      return isOn ? 'Turn off speaker' : 'Turn on speaker';
+    }
+    default:
+      return 'Action';
   }
 }
 
@@ -224,7 +258,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  label: { fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
+  label: {
+    fontSize: 11,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: '#111827',
+  },
   icon: { fontSize: 18, color: '#fff' },
   body: { marginTop: 8 },
   name: { fontSize: 14, fontWeight: '600', color: '#111827' },
@@ -249,5 +289,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
+  },
+  primaryActionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryActionIcon: {
+    fontSize: 16,
+    marginRight: 6,
   },
 });
