@@ -1,4 +1,5 @@
 // src/store/deviceStore.ts
+import { AppState } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchDevicesForUser, HaMode } from '../api/dinodia';
 import type { UIDevice } from '../models/device';
@@ -80,11 +81,22 @@ export function useDevices(userId: number, mode: HaMode) {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
+  // Track whether the app is in the foreground to avoid background polling.
+  const appStateRef = useRef<string>(AppState.currentState);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      appStateRef.current = state;
+    });
+    return () => {
+      sub.remove();
     };
   }, []);
 
@@ -162,6 +174,7 @@ export function useDevices(userId: number, mode: HaMode) {
     })();
 
     const interval = setInterval(() => {
+      if (appStateRef.current !== 'active') return;
       void refreshDevices({ background: true });
     }, 12000);
 

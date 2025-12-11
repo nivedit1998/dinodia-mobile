@@ -85,7 +85,10 @@ export const DeviceCard = memo(function DeviceCard({
       });
       if (onAfterCommand) await Promise.resolve(onAfterCommand());
     } catch (err) {
-      console.log('device command error', err);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('device command error', err);
+      }
       Alert.alert(
         'Action failed',
         err instanceof Error ? err.message : 'Unable to send command'

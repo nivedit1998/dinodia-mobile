@@ -37,7 +37,10 @@ export function LoginScreen() {
       await setSession({ user, haConnection });
       // Navigation container will switch from Auth to App automatically
     } catch (err) {
-      console.log('login error in screen', err);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('login error in screen', err);
+      }
       Alert.alert(
         'Login failed',
         err instanceof Error ? `${err.name}: ${err.message}` : JSON.stringify(err)

@@ -153,7 +153,10 @@ export async function fetchDevicesForUser(
   try {
     enriched = await getDevicesWithMetadata(haLike);
   } catch (err) {
-    console.error('Failed to fetch devices from HA:', err);
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch devices from HA:', err);
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     // Let the hook handle the error and clear stale devices.
     throw new Error(`Unable to reach Home Assistant: ${message}`);

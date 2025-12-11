@@ -37,9 +37,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       const stored = await loadJson<Session>(SESSION_KEY);
       if (stored) {
-        if (stored.user) {
-          await clearAllDeviceCacheForUser(stored.user.id);
-        }
         setSessionState(stored);
       }
       // Always start new app sessions in home mode.
@@ -49,15 +46,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSession = async (s: Session) => {
+    const previousUserId = session.user?.id;
+    if (previousUserId && s.user?.id && previousUserId !== s.user.id) {
+      await clearAllDeviceCacheForUser(previousUserId).catch(() => undefined);
+    }
     setSessionState(s);
     setHaModeState('home');
     await saveJson(SESSION_KEY, s);
   };
 
   const clearSession = async () => {
+    const userId = session.user?.id;
     setSessionState({ user: null, haConnection: null });
     setHaModeState('home');
     await removeKey(SESSION_KEY);
+    if (userId) {
+      await clearAllDeviceCacheForUser(userId).catch(() => undefined);
+    }
   };
 
   return (

@@ -216,7 +216,10 @@ export function SpotifyCard({ compact }: SpotifyCardProps) {
     setLoggingIn(true);
 
     try {
-      console.log('[SpotifyCard] Starting login…');
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[SpotifyCard] Starting login…');
+      }
 
       // Clear cookies so each login starts fresh.
       try {
@@ -232,15 +235,20 @@ export function SpotifyCard({ compact }: SpotifyCardProps) {
       await saveEphemeralAuth({ codeVerifier, state }).catch(() => undefined);
 
       const url = buildAuthorizeUrl(codeChallenge, state);
-      console.log('[SpotifyCard] Auth URL:', url);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[SpotifyCard] Auth URL:', url);
+      }
 
       setAuthUrl(url);
       setAuthVisible(true);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Spotify login failed to start.';
-      // eslint-disable-next-line no-console
-      console.error('[SpotifyCard] Login error:', error);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.error('[SpotifyCard] Login error:', error);
+      }
       setErrorMessage(message);
     } finally {
       setLoggingIn(false);

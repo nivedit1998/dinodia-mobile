@@ -93,7 +93,10 @@ export function DeviceDetail({
       await handleDeviceCommand({ ha, entityId: device.entityId, command, value });
       if (onCommandComplete) await Promise.resolve(onCommandComplete());
     } catch (err) {
-      console.log('device detail command error', err);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('device detail command error', err);
+      }
     } finally {
       setPendingCommand(null);
     }
