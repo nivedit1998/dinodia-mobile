@@ -37,9 +37,19 @@ const { InlineWifiSetupLauncher } = NativeModules as {
 
 const CARD_BASE_ROW_HEIGHT = 130;
 
-export function AdminDashboardScreen() {
-  const { session, clearSession, haMode, setHaMode } = useSession();
-  const userId = session.user?.id!;
+type AdminDashboardContentProps = {
+  userId: number;
+  haMode: HaMode;
+  clearSession: () => Promise<void>;
+  setHaMode: (mode: HaMode) => void;
+};
+
+function AdminDashboardContent({
+  userId,
+  haMode,
+  clearSession,
+  setHaMode,
+}: AdminDashboardContentProps) {
   const { devices, refreshing, error, refreshDevices, lastUpdated } = useDevices(userId, haMode);
   const [loggingOut, setLoggingOut] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -140,7 +150,7 @@ export function AdminDashboardScreen() {
       .catch(() => undefined)
       .then(() => {
         setHaMode(nextMode);
-    });
+      });
   }, [isCloud, setHaMode, userId]);
 
   const handleOpenWifiSetup = useCallback(() => {
@@ -327,6 +337,22 @@ export function AdminDashboardScreen() {
       />
       <SpotifyCard />
     </View>
+  );
+}
+
+export function AdminDashboardScreen() {
+  const { session, clearSession, haMode, setHaMode } = useSession();
+  const userId = session.user?.id!;
+  const key = `${userId}_${haMode}`;
+
+  return (
+    <AdminDashboardContent
+      key={key}
+      userId={userId}
+      haMode={haMode}
+      clearSession={clearSession}
+      setHaMode={setHaMode}
+    />
   );
 }
 

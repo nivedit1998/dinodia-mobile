@@ -42,6 +42,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         }
         setSessionState(stored);
       }
+      // Always start new app sessions in home mode.
+      setHaModeState('home');
       setLoading(false);
     })();
   }, []);

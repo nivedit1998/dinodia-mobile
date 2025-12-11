@@ -79,6 +79,7 @@ export function useDevices(userId: number, mode: HaMode) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -99,15 +100,29 @@ export function useDevices(userId: number, mode: HaMode) {
   const refreshDevices = useCallback(
     async (opts: RefreshOptions = {}): Promise<UIDevice[] | null> => {
       const silent = opts.background === true;
-      if (!silent) setRefreshing(true);
+      let currentRequestId: number | null = null;
+
+      if (!silent) {
+        const nextId = requestIdRef.current + 1;
+        requestIdRef.current = nextId;
+        currentRequestId = nextId;
+        setRefreshing(true);
+      }
+
       try {
         const entry = await fetchAndCacheDevices(userId, mode);
+        if (!mountedRef.current) {
+          return null;
+        }
+        if (currentRequestId !== null && currentRequestId !== requestIdRef.current) {
+          return null;
+        }
         updateState(entry);
         setError(null);
         return entry.devices;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load devices';
-        if (mountedRef.current) {
+        if (mountedRef.current && (currentRequestId === null || currentRequestId === requestIdRef.current)) {
           setError(message);
           // Clear devices for this mode on error to avoid showing stale data.
           const emptyEntry: DeviceCacheEntry = { devices: [], updatedAt: Date.now() };
@@ -116,7 +131,9 @@ export function useDevices(userId: number, mode: HaMode) {
         }
         return null;
       } finally {
-        if (mountedRef.current && !silent) setRefreshing(false);
+        if (mountedRef.current && !silent && currentRequestId !== null && currentRequestId === requestIdRef.current) {
+          setRefreshing(false);
+        }
       }
     },
     [mode, updateState, userId]

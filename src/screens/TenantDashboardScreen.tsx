@@ -40,9 +40,19 @@ const CARD_BASE_ROW_HEIGHT = 130;
 const ALL_AREAS = 'ALL';
 const ALL_AREAS_LABEL = 'All Areas';
 
-export function TenantDashboardScreen() {
-  const { session, clearSession, haMode, setHaMode } = useSession();
-  const userId = session.user?.id!;
+type TenantDashboardContentProps = {
+  userId: number;
+  haMode: HaMode;
+  clearSession: () => Promise<void>;
+  setHaMode: (mode: HaMode) => void;
+};
+
+function TenantDashboardContent({
+  userId,
+  haMode,
+  clearSession,
+  setHaMode,
+}: TenantDashboardContentProps) {
   const { devices, refreshing, error, refreshDevices, lastUpdated } = useDevices(userId, haMode);
   const [loggingOut, setLoggingOut] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -354,6 +364,22 @@ export function TenantDashboardScreen() {
         onLogout={handleLogout}
       />
     </View>
+  );
+}
+
+export function TenantDashboardScreen() {
+  const { session, clearSession, haMode, setHaMode } = useSession();
+  const userId = session.user?.id!;
+  const key = `${userId}_${haMode}`;
+
+  return (
+    <TenantDashboardContent
+      key={key}
+      userId={userId}
+      haMode={haMode}
+      clearSession={clearSession}
+      setHaMode={setHaMode}
+    />
   );
 }
 

@@ -72,8 +72,9 @@ export async function getUserWithHaConnection(
     haConnection = await fetchHaConnectionOwnedBy(user.id);
   }
 
-  if (!haConnection && user.role === 'TENANT') {
-    // Find any admin with a connection
+  if (user.role === 'TENANT') {
+    // For tenants, always resolve the canonical HA connection from an admin,
+    // so they stay in sync with the admin's HA settings (base URL, token, etc.).
     const { data: admins, error } = await supabase
       .from('User')
       .select('id, haConnectionId')
@@ -107,6 +108,8 @@ export async function getUserWithHaConnection(
 
       haConnection = ha;
       user = (await fetchUserWithRelations(userId))!;
+    } else if (!haConnection) {
+      throw new Error('HA connection not configured for any admin');
     }
   }
 
