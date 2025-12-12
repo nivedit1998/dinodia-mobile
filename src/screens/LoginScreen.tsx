@@ -22,11 +22,26 @@ export function LoginScreen() {
     }
   };
 
+  const friendlyLoginError = (err: unknown): string => {
+    const raw = err instanceof Error ? err.message : String(err ?? '');
+    const lowered = raw.toLowerCase();
+    if (lowered.includes('invalid credentials') || lowered.includes('could not find that username')) {
+      return 'We could not log you in. Check your username and password and try again.';
+    }
+    if (lowered.includes('username and password are required')) {
+      return 'Enter both username and password to sign in.';
+    }
+    if (lowered.includes('endpoint is not configured') || lowered.includes('login is not available')) {
+      return 'Login is not available right now. Please try again in a moment.';
+    }
+    return 'We could not log you in right now. Please try again.';
+  };
+
   async function handleLogin() {
     if (loading) return;
     const trimmedUsername = username.trim();
     if (!trimmedUsername || !password) {
-      Alert.alert('Login', 'Please enter both username and password.');
+      Alert.alert('Login', 'Enter both username and password to sign in.');
       return;
     }
     setLoading(true);
@@ -41,10 +56,7 @@ export function LoginScreen() {
         // eslint-disable-next-line no-console
         console.log('login error in screen', err);
       }
-      Alert.alert(
-        'Login failed',
-        err instanceof Error ? `${err.name}: ${err.message}` : JSON.stringify(err)
-      );
+      Alert.alert("Let's try that again", friendlyLoginError(err));
     } finally {
       setLoading(false);
     }

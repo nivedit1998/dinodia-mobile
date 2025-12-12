@@ -133,7 +133,10 @@ export function useDevices(userId: number, mode: HaMode) {
         setError(null);
         return entry.devices;
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load devices';
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'We could not load your devices right now. Please refresh or switch modes.';
         if (mountedRef.current && (currentRequestId === null || currentRequestId === requestIdRef.current)) {
           setError(message);
           // Clear devices for this mode on error to avoid showing stale data.

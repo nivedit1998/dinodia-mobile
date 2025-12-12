@@ -244,7 +244,7 @@ export function SpotifyCard({ compact }: SpotifyCardProps) {
       setAuthVisible(true);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Spotify login failed to start.';
+        error instanceof Error ? error.message : 'We could not start Spotify login. Please try again.';
       if (__DEV__) {
         // eslint-disable-next-line no-console
         console.error('[SpotifyCard] Login error:', error);
@@ -266,26 +266,26 @@ export function SpotifyCard({ compact }: SpotifyCardProps) {
         const current = await loadEphemeralAuth();
         await clearEphemeralAuth().catch(() => undefined);
         if (!current) {
-          setErrorMessage('Spotify login failed: missing PKCE state.');
+          setErrorMessage('We could not finish Spotify login. Please try again.');
           return;
         }
 
         const parsed = new URL(url);
         const returnedState = parsed.searchParams.get('state');
         if (!returnedState || returnedState !== current.state) {
-          setErrorMessage('Spotify login failed: invalid state.');
+          setErrorMessage('We could not finish Spotify login. Please try again.');
           return;
         }
 
         const error = parsed.searchParams.get('error');
         if (error) {
-          setErrorMessage(`Spotify login cancelled or failed: ${error}`);
+          setErrorMessage('Spotify login was cancelled or did not finish. Please try again.');
           return;
         }
 
         const code = parsed.searchParams.get('code');
         if (!code) {
-          setErrorMessage('Spotify login failed: missing auth code.');
+          setErrorMessage('We could not finish Spotify login. Please try again.');
           return;
         }
 
@@ -298,7 +298,7 @@ export function SpotifyCard({ compact }: SpotifyCardProps) {
           const message =
             tokenError instanceof Error
               ? tokenError.message
-              : 'Spotify login failed while exchanging token.';
+              : 'We could not finish Spotify login. Please try again.';
           setErrorMessage(message);
           setIsLoggedIn(false);
         }

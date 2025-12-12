@@ -104,17 +104,19 @@ export async function getUserWithHaConnection(
         .eq('id', user.id);
 
       const ha = await fetchHaConnectionById(adminHaConnectionId);
-      if (!ha) throw new Error('HA connection not found');
+      if (!ha) throw new Error('Dinodia Hub connection not found');
 
       haConnection = ha;
       user = (await fetchUserWithRelations(userId))!;
     } else if (!haConnection) {
-      throw new Error('HA connection not configured for any admin');
+      throw new Error(
+        'Dinodia Hub connection is not configured for this property. The homeowner needs to set it up.'
+      );
     }
   }
 
   if (!user || !haConnection) {
-    throw new Error('HA connection not configured');
+    throw new Error('Dinodia Hub connection is not configured for this home.');
   }
 
   return { user, haConnection };
@@ -142,9 +144,13 @@ export async function fetchDevicesForUser(
   const reachable = await probeHaReachability(haLike, mode === 'home' ? 2000 : 4000);
   if (!reachable) {
     if (mode === 'home') {
-      throw new Error('Unable to reach Home Assistant on the local network.');
+      throw new Error(
+        'We cannot find your Dinodia Hub on the home Wi-Fi. It looks like you are away from home—switch to Dinodia Cloud to control your place.'
+      );
     } else {
-      throw new Error('Unable to reach Home Assistant via cloud.');
+      throw new Error(
+        'Dinodia Cloud is not ready yet. The homeowner needs to finish setting up remote access for this property.'
+      );
     }
   }
 
@@ -157,9 +163,12 @@ export async function fetchDevicesForUser(
       // eslint-disable-next-line no-console
       console.error('Failed to fetch devices from HA:', err);
     }
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message =
+      err instanceof Error && err.message
+        ? err.message
+        : 'We could not connect to your Dinodia Hub right now. Please try again.';
     // Let the hook handle the error and clear stale devices.
-    throw new Error(`Unable to reach Home Assistant: ${message}`);
+    throw new Error(message);
   }
 
   // 2) Load overrides
@@ -317,10 +326,10 @@ function normalizeHaBaseUrl(value: string): string {
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw new Error('Invalid HA base URL');
+    throw new Error('Invalid Dinodia Hub URL');
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('HA base URL must start with http:// or https://');
+    throw new Error('Dinodia Hub URL must start with http:// or https://');
   }
   return trimmed.replace(/\/+$/, '');
 }

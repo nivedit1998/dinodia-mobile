@@ -20,12 +20,15 @@ export function TenantSettingsScreen() {
         newPassword,
         confirmNewPassword,
       });
-      Alert.alert('Success', 'Password updated');
+      Alert.alert('Success', 'Password updated.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update password');
+      Alert.alert(
+        'Something went wrong',
+        'We could not update that password. Please check your details and try again.'
+      );
     }
   }
 

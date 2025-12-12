@@ -80,10 +80,10 @@ export function DeviceDetail({
     if (!device) return;
     if (!ha) {
       Alert.alert(
-        'Unavailable',
+        'Almost there',
         haMode === 'cloud'
-          ? 'Cloud control is not configured for this home.'
-          : 'Local Home Assistant connection is not available.'
+          ? 'Dinodia Cloud is not ready yet. The homeowner needs to finish setting up remote access for this property.'
+          : 'We cannot find your Dinodia Hub on the home Wi-Fi. It looks like you are away from home—switch to Dinodia Cloud to control your place.'
       );
       return;
     }
@@ -97,6 +97,12 @@ export function DeviceDetail({
         // eslint-disable-next-line no-console
         console.log('device detail command error', err);
       }
+      Alert.alert(
+        'We could not complete that',
+        err instanceof Error && err.message
+          ? err.message
+          : 'We could not send that to your Dinodia Hub. Please try again.'
+      );
     } finally {
       setPendingCommand(null);
     }

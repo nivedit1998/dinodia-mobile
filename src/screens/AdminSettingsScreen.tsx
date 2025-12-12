@@ -28,12 +28,15 @@ export function AdminSettingsScreen() {
         newPassword,
         confirmNewPassword,
       });
-      Alert.alert('Success', 'Password updated');
+      Alert.alert('Success', 'Password updated.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update password');
+      Alert.alert(
+        'Something went wrong',
+        'We could not update that password. Please check your details and try again.'
+      );
     }
   }
 
@@ -47,14 +50,17 @@ export function AdminSettingsScreen() {
         haPassword,
         haLongLivedToken: haToken,
       });
-      Alert.alert('Updated', 'Home Assistant settings updated');
+      Alert.alert('Updated', 'Dinodia Hub settings updated.');
       await setSession({ user, haConnection: updated });
       setHaBaseUrl(updated.baseUrl);
       setHaCloudUrl(updated.cloudUrl ?? '');
       setHaPassword('');
       setHaToken('');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update HA settings');
+      Alert.alert(
+        'Something went wrong',
+        'We could not update your Dinodia Hub settings right now. Please check the details and try again.'
+      );
     }
   }
 
@@ -95,7 +101,7 @@ export function AdminSettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Home Assistant</Text>
+        <Text style={styles.sectionTitle}>Dinodia Hub</Text>
         <TextInput
           style={styles.input}
           placeholder="HA username"
@@ -104,32 +110,32 @@ export function AdminSettingsScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="HA base URL"
+          placeholder="Dinodia Hub URL (home Wi-Fi)"
           value={haBaseUrl}
           onChangeText={setHaBaseUrl}
         />
         <TextInput
           style={styles.input}
-          placeholder="HA cloud URL (Nabu Casa)"
+          placeholder="Dinodia Cloud URL (Nabu Casa)"
           value={haCloudUrl}
           onChangeText={setHaCloudUrl}
           autoCapitalize="none"
         />
         <TextInput
           style={styles.input}
-          placeholder="New HA password (optional)"
+          placeholder="New Dinodia Hub password (optional)"
           value={haPassword}
           onChangeText={setHaPassword}
           secureTextEntry
         />
         <TextInput
           style={styles.input}
-          placeholder="New HA long-lived token (optional)"
+          placeholder="New Dinodia Hub long-lived token (optional)"
           value={haToken}
           onChangeText={setHaToken}
           secureTextEntry
         />
-        <Button title="Update HA settings" onPress={onUpdateHa} />
+        <Button title="Update Dinodia Hub settings" onPress={onUpdateHa} />
       </View>
 
       <View style={styles.section}>

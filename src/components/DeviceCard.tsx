@@ -67,10 +67,10 @@ export const DeviceCard = memo(function DeviceCard({
     if (!primaryAction) return;
     if (!ha) {
       Alert.alert(
-        'Unavailable',
+        'Almost there',
         haMode === 'cloud'
-          ? 'Cloud control is not configured for this home.'
-          : 'Local Home Assistant connection is not available.'
+          ? 'Dinodia Cloud is not ready yet. The homeowner needs to finish setting up remote access for this property.'
+          : 'We cannot find your Dinodia Hub on the home Wi-Fi. It looks like you are away from home—switch to Dinodia Cloud to control your place.'
       );
       return;
     }
@@ -90,8 +90,10 @@ export const DeviceCard = memo(function DeviceCard({
         console.log('device command error', err);
       }
       Alert.alert(
-        'Action failed',
-        err instanceof Error ? err.message : 'Unable to send command'
+        'We could not complete that',
+        err instanceof Error && err.message
+          ? err.message
+          : 'We could not send that to your Dinodia Hub. Please try again.'
       );
     } finally {
       setPending(false);

@@ -49,11 +49,11 @@ export async function loginWithCredentials(
 ): Promise<AuthUser> {
   const trimmedUsername = username.trim();
   if (!trimmedUsername || !password) {
-    throw new Error('Username and password are required');
+    throw new Error('Enter both username and password to sign in.');
   }
 
   if (!ENV.AUTH_BASE_URL) {
-    throw new Error('Auth endpoint is not configured');
+    throw new Error('Login is not available right now. Please try again in a moment.');
   }
 
   try {
@@ -64,15 +64,19 @@ export async function loginWithCredentials(
     });
 
     if (!data.ok || !data.user) {
-      throw new Error(data.error || 'Invalid credentials');
+      throw new Error(
+        typeof data.error === 'string' && data.error.trim().length > 0
+          ? data.error
+          : 'We could not find that username and password. Please try again.'
+      );
     }
 
     return data.user;
   } catch (err) {
     if (err instanceof Error) {
-      throw new Error(err.message || 'Unable to login');
+      throw new Error(err.message || 'We could not log you in right now. Please try again.');
     }
-    throw new Error('Unable to login');
+    throw new Error('We could not log you in right now. Please try again.');
   }
 }
 

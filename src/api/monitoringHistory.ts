@@ -149,11 +149,11 @@ export async function fetchSensorHistoryForCurrentUser(
         // Expect { unit, points }
         return { unit: body.unit ?? null, points: Array.isArray(body.points) ? body.points : [] };
       } catch (err: any) {
-        throw new Error(`Failed to load sensor history (platform fallback): ${err?.message ?? String(err)}`);
+        throw new Error('We could not load your history right now. Please try again.');
       }
     }
 
-    throw new Error(error.message || 'Failed to load sensor history');
+    throw new Error('We could not load your history right now. Please try again.');
   }
 
   const readings = Array.isArray(data) ? data : [];
@@ -213,4 +213,3 @@ export async function fetchSensorHistoryForCurrentUser(
     points,
   };
 }
-

@@ -50,19 +50,19 @@ function describeNetworkFailure(baseUrl: string, path: string, err: unknown): Er
     const host = parsed.hostname.toLowerCase();
     if (host.endsWith('.local')) {
       hints.push(
-        'Android devices often cannot resolve .local hostnames. Update the HA URL to use the IP address (e.g., http://192.168.1.10:8123) in the Admin settings.'
+        'Android devices often cannot resolve .local hostnames. Update the Dinodia Hub URL to use the IP address (e.g., http://192.168.1.10:8123) in Settings.'
       );
     }
     if (parsed.protocol === 'http:') {
       hints.push(
-        'Ensure your device is on the same LAN as Home Assistant and that cleartext HTTP traffic is allowed.'
+        'Make sure you are on the same Wi-Fi as the Dinodia Hub and that cleartext HTTP traffic is allowed.'
       );
     }
   } catch {
     // ignore parsing issues; baseUrl should already be valid
   }
   const hintText = hints.length > 0 ? ` ${hints.join(' ')}` : '';
-  return new Error(`HA network error: ${original}.${hintText}`);
+  return new Error(`Dinodia Hub network issue: ${original}.${hintText} Please try again.`);
 }
 
 async function fetchWithTimeout(
@@ -88,7 +88,7 @@ async function fetchWithTimeout(
   return await Promise.race([
     fetch(url, options),
     new Promise<Response>((_, reject) =>
-      setTimeout(() => reject(new Error('Network timeout')), timeoutMs)
+      setTimeout(() => reject(new Error('Dinodia Hub request timed out. Please try again.')), timeoutMs)
     ),
   ]);
 }
@@ -114,7 +114,9 @@ async function callHomeAssistantAPI<T>(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA API error ${res.status}: ${text}`);
+    throw new Error(
+      `Dinodia Hub could not complete that request (${res.status}). ${text || 'Please try again.'}`
+    );
   }
   return (await res.json()) as T;
 }
@@ -140,7 +142,9 @@ async function renderHomeAssistantTemplate<T>(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA template error ${res.status}: ${text}`);
+    throw new Error(
+      `Dinodia Hub could not prepare that data (${res.status}). ${text || 'Please try again.'}`
+    );
   }
   return (await res.json()) as T;
 }
@@ -225,7 +229,9 @@ export async function callHaService(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HA service error ${res.status}: ${text}`);
+    throw new Error(
+      `Dinodia Hub could not apply that action (${res.status}). ${text || 'Please try again.'}`
+    );
   }
   try {
     return await res.json();

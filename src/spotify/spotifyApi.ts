@@ -98,7 +98,11 @@ async function exchange(
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(`Spotify token request failed: ${response.status} ${text}`);
+    throw new Error(
+      text && text.trim().length > 0
+        ? `We could not finish Spotify login. ${text}`
+        : 'We could not finish Spotify login. Please try again.'
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -205,8 +209,8 @@ export async function getPlaybackState(): Promise<SpotifyPlaybackState | null> {
     if (response.status === 401) {
       await clearTokens();
     }
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to load playback state: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not load Spotify right now. Please try again.');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -241,8 +245,8 @@ export async function getDevices(): Promise<SpotifyDevice[]> {
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to load devices: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not load your Spotify devices right now. Please try again.');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -273,8 +277,8 @@ export async function transferPlayback(deviceId: string): Promise<void> {
   });
 
   if (!response.ok && response.status !== 204) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to transfer playback: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not move playback to that device. Please try again.');
   }
 }
 
@@ -287,8 +291,8 @@ export async function resumePlayback(): Promise<void> {
     body: JSON.stringify({}),
   });
   if (!response.ok && response.status !== 204) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to resume playback: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not resume playback. Please try again.');
   }
 }
 
@@ -297,8 +301,8 @@ export async function pausePlayback(): Promise<void> {
     method: 'PUT',
   });
   if (!response.ok && response.status !== 204) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to pause playback: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not pause playback. Please try again.');
   }
 }
 
@@ -307,8 +311,8 @@ export async function skipToNext(): Promise<void> {
     method: 'POST',
   });
   if (!response.ok && response.status !== 204) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to skip to next: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not skip to the next track. Please try again.');
   }
 }
 
@@ -317,7 +321,7 @@ export async function skipToPrevious(): Promise<void> {
     method: 'POST',
   });
   if (!response.ok && response.status !== 204) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to skip to previous: ${response.status} ${text}`);
+    await response.text().catch(() => '');
+    throw new Error('We could not go back to the previous track. Please try again.');
   }
 }
