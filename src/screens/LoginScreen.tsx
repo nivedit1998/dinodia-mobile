@@ -1,26 +1,16 @@
 // src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, NativeModules } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { loginWithCredentials } from '../api/auth';
 import { getUserWithHaConnection } from '../api/dinodia';
 import { useSession } from '../store/sessionStore';
 import { clearAllDeviceCacheForUser } from '../store/deviceStore';
-
-const { InlineWifiSetupLauncher } = NativeModules;
 
 export function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { setSession } = useSession();
-
-  const handleOpenWifiSetup = () => {
-    if (InlineWifiSetupLauncher && typeof InlineWifiSetupLauncher.open === 'function') {
-      InlineWifiSetupLauncher.open();
-    } else {
-      Alert.alert('Wi-Fi', 'Wi-Fi setup is not available on this device.');
-    }
-  };
 
   const friendlyLoginError = (err: unknown): string => {
     const raw = err instanceof Error ? err.message : String(err ?? '');
@@ -90,10 +80,6 @@ export function LoginScreen() {
         }}
         disabled={loading}
       />
-
-      <View style={styles.wifiButton}>
-        <Button title="Add Wi-Fi" onPress={handleOpenWifiSetup} />
-      </View>
     </View>
   );
 }
@@ -109,5 +95,4 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 12,
   },
-  wifiButton: { marginTop: 16 },
 });

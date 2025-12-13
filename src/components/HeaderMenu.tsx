@@ -6,7 +6,6 @@ type Props = {
   isCloud: boolean;
   onClose: () => void;
   onToggleMode: () => void;
-  onOpenWifi: () => void;
   onLogout: () => void;
 };
 
@@ -15,7 +14,6 @@ export function HeaderMenu({
   isCloud,
   onClose,
   onToggleMode,
-  onOpenWifi,
   onLogout,
 }: Props) {
   const modeLabel = isCloud ? 'Move to Home Mode' : 'Move to Cloud Mode';
@@ -30,30 +28,19 @@ export function HeaderMenu({
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => {
-              onToggleMode();
-              onClose();
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.menuItemText}>{modeLabel}</Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              onOpenWifi();
-              onClose();
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.menuItemText}>Wi‑Fi Options</Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              onLogout();
-              onClose();
+            onToggleMode();
+            onClose();
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.menuItemText}>{modeLabel}</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => {
+            onLogout();
+            onClose();
             }}
             activeOpacity={0.85}
           >

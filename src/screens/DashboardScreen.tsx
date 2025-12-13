@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
-  NativeModules,
   TouchableOpacity,
   FlatList,
   Modal,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { UIDevice } from '../models/device';
 import { normalizeLabel } from '../utils/deviceLabels';
 import { isDetailDevice, isSensorDevice } from '../utils/deviceKinds';
@@ -31,10 +31,6 @@ import { SpotifyCard } from '../components/SpotifyCard';
 import { loadJson, saveJson } from '../utils/storage';
 import type { Role } from '../models/roles';
 import { useSession } from '../store/sessionStore';
-
-const { InlineWifiSetupLauncher } = NativeModules as {
-  InlineWifiSetupLauncher?: { open?: () => void };
-};
 
 const CARD_BASE_ROW_HEIGHT = 130;
 const ALL_AREAS = 'ALL';
@@ -124,6 +120,21 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [devices]);
 
+  const { width, height } = useWindowDimensions();
+  const shortestSide = Math.min(width, height);
+  const isLandscape = width > height;
+
+  const maxColumns = useMemo(() => {
+    return isLandscape ? 4 : 2;
+  }, [isLandscape]);
+
+  const baseCardHeight = useMemo(() => {
+    if (shortestSide >= 900) return CARD_BASE_ROW_HEIGHT + 20;
+    if (shortestSide >= 600) return CARD_BASE_ROW_HEIGHT;
+    if (shortestSide >= 400) return CARD_BASE_ROW_HEIGHT - 15;
+    return CARD_BASE_ROW_HEIGHT - 30;
+  }, [shortestSide]);
+
   const visibleDevices = useMemo(
     () =>
       devices.filter((d) => {
@@ -147,7 +158,10 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
   }, [areaOptions, selectedArea]);
 
   const sections = useMemo(() => buildDeviceSections(visibleDevices), [visibleDevices]);
-  const rows = useMemo(() => buildSectionLayoutRows(sections), [sections]);
+  const rows = useMemo(
+    () => buildSectionLayoutRows(sections, maxColumns),
+    [sections, maxColumns]
+  );
 
   const linkedSensors = useMemo(
     () =>
@@ -186,19 +200,11 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
       });
   }, [isCloud, setHaMode, userId]);
 
-  const handleOpenWifiSetup = useCallback(() => {
-    if (InlineWifiSetupLauncher && typeof InlineWifiSetupLauncher.open === 'function') {
-      InlineWifiSetupLauncher.open();
-    } else {
-      Alert.alert('Wi-Fi', 'Wi-Fi setup is not available on this device.');
-    }
-  }, []);
-
   const renderDeviceRow = useCallback(
     ({ item }: { item: LayoutRow }) => (
       <View style={styles.deviceRow}>
         {item.sections.map((section) => {
-          const sectionWidth = `${section.span * 25}%`;
+          const sectionWidth = `${Math.min(100, (section.span / maxColumns) * 100)}%`;
           return (
             <View key={section.key} style={[styles.sectionContainer, { width: sectionWidth }]}>
               <View style={styles.sectionHeader}>
@@ -212,7 +218,7 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
                   const size: DeviceCardSize = getDeviceLayoutSize(device);
                   const { width: widthUnits, height: heightUnits } = getDeviceDimensions(size);
                   const widthPercent = `${Math.min(100, (widthUnits / section.span) * 100)}%`;
-                  const minHeight = CARD_BASE_ROW_HEIGHT * heightUnits;
+                  const minHeight = baseCardHeight * heightUnits;
                   return (
                     <View
                       key={device.entityId}
@@ -234,7 +240,15 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
         })}
       </View>
     ),
-    [devices.length, handleBackgroundRefresh, handleOpenDetails, isAdmin, refreshing]
+    [
+      baseCardHeight,
+      devices.length,
+      handleBackgroundRefresh,
+      handleOpenDetails,
+      maxColumns,
+      isAdmin,
+      refreshing,
+    ]
   );
 
   const isColdStart = !lastUpdated && devices.length === 0 && !error;
@@ -249,6 +263,7 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
         data={rows}
         keyExtractor={(item) => item.key}
         renderItem={renderDeviceRow}
+        extraData={maxColumns}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
@@ -361,7 +376,6 @@ function DashboardContent({ userId, role, haMode, clearSession, setHaMode }: Das
         isCloud={isCloud}
         onClose={() => setMenuVisible(false)}
         onToggleMode={handleToggleMode}
-        onOpenWifi={handleOpenWifiSetup}
         onLogout={handleLogout}
       />
     </View>
@@ -378,18 +392,21 @@ export function DashboardScreen({ role }: DashboardScreenProps) {
   const key = `${userId}_${haMode}_${role}`;
 
   return (
-    <DashboardContent
-      key={key}
-      userId={userId}
-      role={role}
-      haMode={haMode}
-      clearSession={clearSession}
-      setHaMode={setHaMode}
-    />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+      <DashboardContent
+        key={key}
+        userId={userId}
+        role={role}
+        haMode={haMode}
+        clearSession={clearSession}
+        setHaMode={setHaMode}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#f5f5f7' },
   screen: { flex: 1, backgroundColor: '#f5f5f7' },
   list: { flex: 1, backgroundColor: '#f5f5f7' },
   listContent: { padding: 16, backgroundColor: '#f5f5f7' },
